@@ -140,10 +140,75 @@ if (fs.existsSync(contradictionFile)) {
   });
 }
 
-// 4. Calculate Coverage
-const coverage = totalElements === 0 ? 100 : ((taggedElements / totalElements) * 100).toFixed(1);
+// 4. Audit DDL Table Completeness
+const dbDir = path.join(targetDir, '00-raw-inputs', 'db');
+const catalogFile = path.join(targetDir, '01-ground-truth', 'entity-catalog.md');
+let ddlTableCount = 0;
+let catalogedTableCount = 0;
+const missingTables = [];
 
-// 5. Output Audit Scorecard
+if (fs.existsSync(dbDir)) {
+  const sqlFiles = fs.readdirSync(dbDir).filter(f => f.endsWith('.sql'));
+  const foundTables = new Set();
+  sqlFiles.forEach(file => {
+    const content = fs.readFileSync(path.join(dbDir, file), 'utf8');
+    const matches = content.matchAll(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|")?([a-zA-Z0-9_]+)(?:`|")?\s*\(/gmi);
+    for (const m of matches) {
+      foundTables.add(m[1].toLowerCase());
+    }
+  });
+  ddlTableCount = foundTables.size;
+
+  if (ddlTableCount > 0 && fs.existsSync(catalogFile)) {
+    const catalogContent = fs.readFileSync(catalogFile, 'utf8').toLowerCase();
+    foundTables.forEach(table => {
+      const regex = new RegExp(`(?:entity:\\s*|table\\s*|##\\s*\\d*\\.?\\s*)` + table, 'i');
+      if (regex.test(catalogContent) || catalogContent.includes(`\`${table}\``)) {
+        catalogedTableCount++;
+      } else {
+        missingTables.push(table);
+        violations.push({
+          file: '01-ground-truth/entity-catalog.md',
+          line: 1,
+          type: 'DDL_TABLE_NOT_CATALOGED',
+          content: `Table '${table}' exists in DDL but is missing from entity-catalog.md. Run 'node ./bin/ingest-ddl.js' to sync.`
+        });
+      }
+    });
+  }
+}
+
+// 5. Audit BRDs Discovered
+const brdDir = path.join(targetDir, '00-raw-inputs', 'brd');
+let totalBrds = 0;
+if (fs.existsSync(brdDir)) {
+  totalBrds = fs.readdirSync(brdDir).filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md').length;
+}
+
+// 6. Audit Delivery Plan Tasks (if exists)
+const planFile = path.join(targetDir, '02-provenance', 'delivery-plan.md');
+let totalTasks = 0;
+let completedTasks = 0;
+if (fs.existsSync(planFile)) {
+  const content = fs.readFileSync(planFile, 'utf8');
+  const lines = content.split(/\r?\n/);
+  lines.forEach(line => {
+    if (/^[ \t]*-[ \t]*\[[ xX]\]/.test(line)) {
+      totalTasks++;
+      if (/^[ \t]*-[ \t]*\[[xX]\]/.test(line)) {
+        completedTasks++;
+      }
+    }
+  });
+}
+
+// 7. Calculate Coverage & Metrics
+const coverage = totalElements === 0 ? 100 : ((taggedElements / totalElements) * 100).toFixed(1);
+const planStatus = totalTasks === 0 ? 'N/A' : `${completedTasks}/${totalTasks} (${((completedTasks / totalTasks) * 100).toFixed(0)}%)`;
+const ddlStatus = ddlTableCount === 0 ? 'N/A' : `${catalogedTableCount}/${ddlTableCount} (${((catalogedTableCount / ddlTableCount) * 100).toFixed(0)}%)`;
+const brdStatus = totalBrds === 0 ? 'N/A' : `${totalBrds} file(s)`;
+
+// 8. Output Audit Scorecard
 console.log(`┌────────────────────────────────────────────────────────────┐`);
 console.log(`│                    AUDIT SCORECARD                         │`);
 console.log(`├────────────────────────────────────────────────────────────┤`);
@@ -151,6 +216,9 @@ console.log(`│ Total Audited Deliverable Elements : ${String(totalElements).pa
 console.log(`│ Elements with Provenance [SRC:...] : ${String(taggedElements).padEnd(21)} │`);
 console.log(`│ Provenance Tag Coverage            : ${String(coverage + ' %').padEnd(21)} │`);
 console.log(`│ Active Hard Block Contradictions   : ${String(unresolvedContradictions).padEnd(21)} │`);
+console.log(`│ DDL Schema Completeness            : ${String(ddlStatus).padEnd(21)} │`);
+console.log(`│ Product BRDs Discovered            : ${String(brdStatus).padEnd(21)} │`);
+console.log(`│ Delivery Plan Task Completion      : ${String(planStatus).padEnd(21)} │`);
 console.log(`└────────────────────────────────────────────────────────────┘\n`);
 
 if (violations.length > 0) {
@@ -164,6 +232,12 @@ if (violations.length > 0) {
 if (unresolvedContradictions > 0) {
   console.log(`🛑 HARD BLOCK FAILURE: Unresolved contradictions exist in 02-provenance/contradictions.md.`);
   console.log(`   Resolve contradictions via ADRs before generating deliverables.\n`);
+  process.exit(1);
+}
+
+if (missingTables.length > 0) {
+  console.log(`❌ DDL COMPLETENESS FAILURE: ${missingTables.length} table(s) from DDL are missing in entity-catalog.md!`);
+  console.log(`   Run 'node ./bin/ingest-ddl.js' (or 'npm run ingest:ddl') to automatically ingest 100% of tables.\n`);
   process.exit(1);
 }
 

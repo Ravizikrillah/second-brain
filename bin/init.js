@@ -19,7 +19,8 @@ const directories = [
   '04-deliverables/sequence-diagrams',
   '04-deliverables/api-contracts',
   '04-deliverables/lld',
-  '05-adrs'
+  '05-adrs',
+  'bin'
 ];
 
 directories.forEach(dir => {
@@ -29,6 +30,41 @@ directories.forEach(dir => {
     console.log(`  📁 Created: ${dir}`);
   }
 });
+
+// Copy CLI helper tools into target project bin/
+const binSourceDir = __dirname;
+const binTargetDir = path.join(targetDir, 'bin');
+const packageRoot = path.resolve(__dirname, '..');
+
+if (targetDir !== packageRoot) {
+  ['audit.js', 'ingest-ddl.js', 'init.js', 'organize.js'].forEach(script => {
+    const src = path.join(binSourceDir, script);
+    const dest = path.join(binTargetDir, script);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+      try { fs.chmodSync(dest, '755'); } catch (e) {}
+      console.log(`  ⚙️  Copied CLI tool: bin/${script}`);
+    }
+  });
+
+  const targetPackageJson = path.join(targetDir, 'package.json');
+  if (!fs.existsSync(targetPackageJson)) {
+    const pkgContent = JSON.stringify({
+      name: path.basename(targetDir),
+      version: '1.0.0',
+      private: true,
+      scripts: {
+        "init": "node ./bin/init.js",
+        "organize": "node ./bin/organize.js",
+        "ingest:ddl": "node ./bin/ingest-ddl.js",
+        "audit": "node ./bin/audit.js",
+        "test": "node ./bin/audit.js"
+      }
+    }, null, 2) + '\n';
+    fs.writeFileSync(targetPackageJson, pkgContent, 'utf8');
+    console.log(`  📦 Generated package.json with audit & ingest scripts`);
+  }
+}
 
 const starterFiles = [
   {
@@ -66,6 +102,10 @@ const starterFiles = [
   {
     path: '02-provenance/traceability-matrix.md',
     content: `# Traceability & Provenance Matrix\n\n| Artifact Element | Provenance Tag | Authoritative Source File & Line | Truth Tier | Verification Status |\n| :--- | :--- | :--- | :--- | :--- |\n`
+  },
+  {
+    path: '02-provenance/delivery-plan.md',
+    content: `# 🗺️ Second Brain Delivery & Ingestion Plan\n\n> Tracks 100% completion of database schema models and product deliverables without token exhaustion.\n\n## 1. 🗄️ Database Schemas Ingestion\n- [ ] Task DB-01: Core Entities\n\n## 2. 🚀 Product Journey Deliverables\n- [ ] Task DEL-01: Baseline Feature Deliverables\n\n---\n**Progress**: 0% Ingested | 0% Delivered\n`
   },
   {
     path: '02-provenance/contradictions.md',
