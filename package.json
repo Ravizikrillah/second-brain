@@ -1,0 +1,49 @@
+{
+  "name": "@ravizikrillah/second-brain",
+  "version": "1.0.0",
+  "description": "Universal Second Brain for AI Agents: Ingest BRD, Figma, DB, Code, & MoM into verified PlantUML, API contracts, and LLD with provenance and anti-gaslighting protection.",
+  "keywords": [
+    "agent-skills",
+    "skills",
+    "claude-plugin",
+    "antigravity",
+    "cursor",
+    "second-brain",
+    "system-analyst",
+    "architecture",
+    "provenance"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Ravi Zikrillah",
+    "url": "https://github.com/ravizikrillah"
+  },
+  "homepage": "https://github.com/ravizikrillah/second-brain",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ravizikrillah/second-brain.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ravizikrillah/second-brain/issues"
+  },
+  "bin": {
+    "second-brain": "./bin/init.js"
+  },
+  "main": "./bin/init.js",
+  "files": [
+    "bin/",
+    "skills/",
+    ".claude-plugin/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".cursorrules",
+    "CONTEXT.md",
+    "templates/",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "init": "node ./bin/init.js",
+    "test": "node --test tests/*.test.js"
+  }
+}
