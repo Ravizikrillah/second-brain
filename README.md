@@ -46,6 +46,9 @@ All commands are single-token hyphenated commands accessible in agent conversati
 | `/brain-branch <name>` | Creates an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`. |
 | `/brain-adopt <name>` | Promotes a scenario to `ADOPTED`, generates an authoritative ADR in `05-adrs/`, and updates deliverables. |
 | `/brain-audit` | Validates 100% provenance tag coverage and asserts database DDL and API contract consistency. |
+| `/brain-query <query>` | Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations. |
+| `/brain-impact <target>` | Change Request (CR) & Blast Radius Analyzer across schemas, API contracts, sequence diagrams, and consumers. |
+| `/brain-story <feature>` | Slices deliverables into Jira/Confluence-ready User Stories with Gherkin AC, API specs, and sequence slices. |
 
 ---
 
@@ -136,6 +139,33 @@ APIGW -> OrderSvc: CreateOrder(payload)\n<color:#28a745><b>[SRC:DDL:tbl_orders]<
 **Body**:
 - `customer_id` (string, UUID): Customer identifier `[SRC:DDL:tbl_orders.customer_id]`
 ```
+
+---
+
+## 🛠️ System Analyst Power Tools
+
+### 1. `/brain-query <query>`: Instant Knowledge Retrieval
+Ask analytical questions and receive factual answers grounded in active DDL, API contracts, and sequence diagrams:
+```bash
+/brain-query "Which endpoints touch tbl_orders and what state transitions exist?"
+/brain-query "What Kafka events are dispatched when an order expires?"
+```
+
+### 2. `/brain-impact <target>`: Change Request & Blast Radius Analyzer
+Instantly compute the blast radius before agreeing to any schema change or API contract modification:
+```bash
+/brain-impact "Add column tax_id to tbl_orders"
+/brain-impact "Deprecate payment_channel query param in /v1/checkout"
+```
+Produces a 5-vector blast radius report covering Database DDL, API backward compatibility, Sequence Diagram impacts, LLD state transitions, and Surrounding Systems risk scores (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
+
+### 3. `/brain-story <feature>`: Sprint Ticket & FSD Slicer
+Transform verified engineering deliverables into production-ready Jira tickets or Confluence pages:
+```bash
+/brain-story "Create Order flow"
+/brain-story "/api/v1/orders"
+```
+Generates standard User Stories (`As a... I want to... So that...`), multi-scenario Gherkin Acceptance Criteria (`Given-When-Then`), API payload snippets, database touchpoints, and sliced PlantUML diagrams with preserved `[SRC:...]` provenance tags.
 
 ---
 

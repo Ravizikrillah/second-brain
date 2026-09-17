@@ -17,3 +17,6 @@ When working in this repository:
    - `/brain-branch <name>`: Create isolated trade-off scenario in `03-constraint-branches/`.
    - `/brain-adopt <name>`: Adopt scenario via ADR and synchronize deliverables.
    - `/brain-audit`: Audit 100% provenance and system consistency.
+   - `/brain-query <query>`: Interactive Q&A across ground truth, active DDL, and deliverables.
+   - `/brain-impact <target>`: Change Request (CR) & Blast Radius Analyzer.
+   - `/brain-story <feature>`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC.

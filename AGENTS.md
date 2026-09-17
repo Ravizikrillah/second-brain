@@ -40,3 +40,6 @@ If a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:
 - `/brain-branch <name>`: Create an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`.
 - `/brain-adopt <name>`: Record an ADR in `05-adrs/`, set scenario status to `ADOPTED`, and trigger `/brain-deliver` to synchronize deliverables.
 - `/brain-audit`: Verify 100% provenance tag coverage across all deliverables and assert database DDL consistency.
+- `/brain-query <query>`: Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations.
+- `/brain-impact <target>`: Change Request (CR) & Blast Radius Analyzer across schemas, API contracts, sequence diagrams, and consumers.
+- `/brain-story <feature>`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC, API specs, and sequence slices.
