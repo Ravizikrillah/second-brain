@@ -49,6 +49,11 @@ Convert authoritative sequence diagrams, API contracts, and database models into
    - **Success Response**: Concrete JSON snippet
    - **Database Impact**: Table name, columns modified, lock mechanism
    - **Kafka / Async Events**: Topic, event name, key, payload schema
+   - **🌐 Surrounding Systems Integration**:
+     - External systems called (e.g. CO SOM, ESB, UPP, DSC)
+     - Outbound endpoint & payload fields required by external IFA
+     - Webhook callbacks listened for
+     - Timeout SLA, Circuit Breaker, and Fallout recovery queue behavior
 
 5. **Extract Sequence Diagram Slice**:
    Extract a lightweight, self-contained PlantUML sequence block directly focused on this story for inclusion in the Jira/Confluence ticket description.

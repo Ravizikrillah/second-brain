@@ -202,13 +202,41 @@ if (fs.existsSync(planFile)) {
   });
 }
 
-// 7. Calculate Coverage & Metrics
+// 7. Audit API Inventory Disambiguation (Internal vs Surrounding Systems)
+const apiInventoryFile = path.join(targetDir, '01-ground-truth', 'api-inventory.md');
+let internalServicesCount = 0;
+let surroundingSystemsCount = 0;
+let apiInventoryDisambiguated = false;
+
+if (fs.existsSync(apiInventoryFile)) {
+  const apiContent = fs.readFileSync(apiInventoryFile, 'utf8');
+  const hasPart1 = /Part 1: Internal Microservice APIs/i.test(apiContent);
+  const hasPart2 = /Part 2: External Surrounding Systems/i.test(apiContent);
+
+  if (hasPart1 && hasPart2) {
+    apiInventoryDisambiguated = true;
+    const internalMatches = apiContent.match(/####\s+📦\s+`([^`]+)`/g) || [];
+    internalServicesCount = internalMatches.length;
+    const surroundingMatches = apiContent.match(/####\s+🌐\s+`([^`]+)`/g) || [];
+    surroundingSystemsCount = surroundingMatches.length;
+  } else if (fs.existsSync(path.join(targetDir, '00-raw-inputs', 'existing-code'))) {
+    violations.push({
+      file: '01-ground-truth/api-inventory.md',
+      line: 1,
+      type: 'API_INVENTORY_AMBIGUOUS',
+      content: 'api-inventory.md lacks strict Part 1 (Internal APIs) vs Part 2 (External Surrounding Systems) separation. Run "node ./bin/ingest-apis.js" to fix.'
+    });
+  }
+}
+
+// 8. Calculate Coverage & Metrics
 const coverage = totalElements === 0 ? 100 : ((taggedElements / totalElements) * 100).toFixed(1);
 const planStatus = totalTasks === 0 ? 'N/A' : `${completedTasks}/${totalTasks} (${((completedTasks / totalTasks) * 100).toFixed(0)}%)`;
 const ddlStatus = ddlTableCount === 0 ? 'N/A' : `${catalogedTableCount}/${ddlTableCount} (${((catalogedTableCount / ddlTableCount) * 100).toFixed(0)}%)`;
 const brdStatus = totalBrds === 0 ? 'N/A' : `${totalBrds} file(s)`;
+const apiStatus = !fs.existsSync(apiInventoryFile) ? 'Missing' : (apiInventoryDisambiguated ? `${internalServicesCount} Internal | ${surroundingSystemsCount} External` : 'Ambiguous');
 
-// 8. Output Audit Scorecard
+// 9. Output Audit Scorecard
 console.log(`┌────────────────────────────────────────────────────────────┐`);
 console.log(`│                    AUDIT SCORECARD                         │`);
 console.log(`├────────────────────────────────────────────────────────────┤`);
@@ -217,6 +245,7 @@ console.log(`│ Elements with Provenance [SRC:...] : ${String(taggedElements).p
 console.log(`│ Provenance Tag Coverage            : ${String(coverage + ' %').padEnd(21)} │`);
 console.log(`│ Active Hard Block Contradictions   : ${String(unresolvedContradictions).padEnd(21)} │`);
 console.log(`│ DDL Schema Completeness            : ${String(ddlStatus).padEnd(21)} │`);
+console.log(`│ API Inventory Disambiguation       : ${String(apiStatus).padEnd(21)} │`);
 console.log(`│ Product BRDs Discovered            : ${String(brdStatus).padEnd(21)} │`);
 console.log(`│ Delivery Plan Task Completion      : ${String(planStatus).padEnd(21)} │`);
 console.log(`└────────────────────────────────────────────────────────────┘\n`);

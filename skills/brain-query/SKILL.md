@@ -22,7 +22,7 @@ Provide instant, authoritative answers to developer, QA, or product queries rega
 
 2. **Search Canonical Truth Sources** (Respecting 5-Tier Precedence):
    - `01-ground-truth/entity-catalog.md` & `00-raw-inputs/db/` (DDL & Schema reality).
-   - `01-ground-truth/api-inventory.md` & `04-deliverables/api-contracts/*.md` (API contracts).
+   - `01-ground-truth/api-inventory.md` (Part 1 for Internal APIs, Part 2 for Surrounding Systems Catalog) & `04-deliverables/api-contracts/*.md`.
    - `04-deliverables/sequence-diagrams/*.puml` & `04-deliverables/lld/*.md` (Execution flow).
    - `01-ground-truth/domain-glossary.md` (Ubiquitous business language).
    - `05-adrs/` (Architectural decisions and rationale).
@@ -41,14 +41,17 @@ Provide instant, authoritative answers to developer, QA, or product queries rega
    - **Relevant Fields**: `column_name` (`DATA_TYPE`, constraints)
    - **State Transitions**: `STATUS_A` -> `STATUS_B` (Trigger: event/API)
 
-   #### 3. 🔌 API & Flow Touchpoints (Tier 2 / Deliverables)
+   #### 3. 🔌 API & Flow Touchpoints (Internal Microservices)
    - **Endpoint**: `METHOD /api/v1/resource` [SRC:...]
+   - **Owning Service**: `fmc-[service]` (Port `XXX`)
    - **Sequence Step**: Diagram `sample.puml` Step [XX]
    - **Async Events**: Topic `topic.order.events`, Payload: `{ "event_type": "..." }`
 
-   #### 4. 🌐 Surrounding Systems & Dependencies
-   - **Upstream Callers**: Web App, Mobile App, 3rd-party Webhook
-   - **Downstream Callers**: Payment Gateway, Notification Service, Fraud Check
+   #### 4. 🌐 Surrounding Systems & External IFAs (Integration Boundary)
+   - **External Systems Involved**: e.g., Central Order (CO), ESB, UPP Payment, DSC
+   - **Outbound Calls**: `METHOD /scrt/...` (Payload fields & SLA timeout)
+   - **Inbound Webhooks / Callbacks**: Callback URL & status payload
+   - **Fallback / Circuit Breaker**: Queue / error handling policy
 
    #### 5. 🏷️ Provenance & Citations
    - [file:///path/to/file#L10-L25] (`[SRC:BRD#REQ-XX]`, `[SRC:DDL:tbl_orders]`)

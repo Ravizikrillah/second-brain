@@ -47,8 +47,21 @@ Create or synchronize the task backlog so deliverables can be executed cleanly t
   - **Deterministic DDL Ingestion**: Run `node ./bin/ingest-ddl.js` (or `npm run ingest:ddl`) to parse 100% of tables and columns directly from SQL files into `entity-catalog.md`. This guarantees zero dropped tables or columns.
   - Enrich the catalog with lifecycle state machine transitions, Go entity mappings, and domain relationships.
   - **ANTI-CHERRY-PICKING RULE**: Every table discovered in DDL MUST be indexed in `entity-catalog.md`. The auditor (`node ./bin/audit.js`) will fail with a hard block if any table is omitted.
-- **API Inventory (`01-ground-truth/api-inventory.md`)**:
-  - Register microservice port allocations, protocols, and active endpoints extracted from configs and code.
+- **API Inventory & Surrounding Systems Disambiguation (`01-ground-truth/api-inventory.md`)**:
+  - **Deterministic API Ingestion**: Run `node ./bin/ingest-apis.js` (or `npm run ingest:apis`) to scan configs, curl samples, and Go controllers, automatically crystallizing both Internal Microservices and External Surrounding Systems with 100% provenance citations `[SRC:...]`.
+  
+#### ⚖️ The IFA Disambiguation Rule (Internal APIs vs External Surrounding Systems):
+Enterprise projects frequently use the term "Interface Agreement" (IFA) for both internal microservice contracts and external integrations. You MUST strictly partition them:
+1. **🔌 Part 1: Internal Microservice APIs (Owned / Inbound)**:
+   - **Provider**: Microservices implemented inside this repository (`repo/backend/fmc-*`).
+   - **Consumer**: Frontend Web, BFF, KrakenD API Gateway, Mobile App, or internal peer services.
+   - **Origin**: Go HTTP router handlers (`internal/controller/http/v1/...`) and gRPC servers.
+   - **Traffic Flow**: Inbound to our services (we host and maintain the endpoints).
+2. **🌐 Part 2: External Surrounding Systems (Outbound Consumed / Inbound Webhooks)**:
+   - **Provider**: External Enterprise Core systems or vendors (Central Order / SOM, ESB, UPP Payment, DSC, DigiPOS, Siebel CRM, Docman Vault, Dukcapil, ISYANA OCR, Orbit, Google Maps).
+   - **Consumer**: Our internal microservices act as **Clients** calling outbound endpoints, OR our services expose callback listeners for asynchronous incoming webhooks.
+   - **Origin**: Microservice YAML configs (`web_api:`, `api_key_surrounding:`), curl samples (`configurations/curl-surroundings/`), and BRD IFA PDFs.
+   - **STRICT PROHIBITION**: NEVER catalog external surrounding systems as internal microservices, and NEVER put external endpoints into internal service lists!
 
 ### 4. 🛡️ Enforce 5-Tier Precedence of Truth
 - Tier 1: Production Code & Active DB DDL

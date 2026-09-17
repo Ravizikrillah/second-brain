@@ -35,7 +35,7 @@ If a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:
 ## ⚡ Orchestrator Commands
 
 - `/brain-init`: Run `node ./bin/init.js` to scaffold or refresh the 6-zone folder hierarchy and templates.
-- `/brain-ingest`: Parse `00-raw-inputs/`, update `01-ground-truth/`, assert truth precedence, detect contradictions, and update `02-provenance/traceability-matrix.md`.
+- `/brain-ingest`: Parse `00-raw-inputs/`, run `node ./bin/ingest-ddl.js` for schemas, run `node ./bin/ingest-apis.js` to disambiguate Internal APIs vs External Surrounding Systems, update `01-ground-truth/`, assert truth precedence, detect contradictions, and update `02-provenance/traceability-matrix.md`.
 - `/brain-deliver`: Verify no Hard Block is active, then generate PlantUML diagrams (`04-deliverables/sequence-diagrams/*.puml`), API contracts (`04-deliverables/api-contracts/*.md`), and LLDs (`04-deliverables/lld/*.md`) with full `[SRC:...]` tags.
 - `/brain-branch <name>`: Create an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`.
 - `/brain-adopt <name>`: Record an ADR in `05-adrs/`, set scenario status to `ADOPTED`, and trigger `/brain-deliver` to synchronize deliverables.

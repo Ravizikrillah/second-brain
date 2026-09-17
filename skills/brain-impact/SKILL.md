@@ -33,8 +33,9 @@ Provide System Analysts with an automated impact matrix showing which database s
    - **Vector 4: Low-Level Designs & Ground Truth (`04-deliverables/lld/`, `01-ground-truth/`)**:
      - State machine transition adjustments.
      - Business logic and domain glossary synchronization.
-   - **Vector 5: Surrounding Systems & Integration Points**:
+   - **Vector 5: Surrounding Systems & Integration Points (`01-ground-truth/api-inventory.md#part-2`)**:
      - Upstream clients (Frontend Web, Mobile iOS/Android, Partner API).
+     - External Surrounding Systems: Does this CR modify outbound payloads to CO, ESB, UPP, DSC, DigiPOS? Does it break incoming webhook callback contracts or necessitate new fallout recovery playbooks?
      - Downstream consumers (Kafka subscribers, Webhook listeners, Batch ETL).
 
 3. **Calculate Risk Assessment Level**:

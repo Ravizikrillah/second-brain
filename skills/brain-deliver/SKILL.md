@@ -28,7 +28,10 @@ Parse the command argument:
 For the selected task/feature, produce the complete 3-pillar deliverables in `04-deliverables/`:
 
 1. **PlantUML Sequence Diagram (`04-deliverables/sequence-diagrams/<feature>.puml`)**:
-   - Explicit participants (Client, APIGW, Microservices, Databases, 3rd Parties).
+   - **Strict Architectural Partitioning**:
+     - Group Internal Services inside `box "WEC FMC Internal Services" #AliceBlue ... end box`.
+     - Group External Systems inside `box "External Surrounding Systems" #LightYellow ... end box` (or stereotype `participant "System Name" as Alias <<External System>> #PapayaWhip`).
+     - Explicitly distinguish outbound client calls (Internal Service -> External System) from inbound webhook callbacks (External System -> Callback Router).
    - Autonumbering enabled (`autonumber "<b>[00]</b>"`).
    - Every request/response arrow MUST include an inline provenance citation tag:
      `<color:#007acc><b>[SRC:BRD#REQ-XX]</b></color>` or `<color:#28a745><b>[SRC:DDL:table_name]</b></color>`.
@@ -36,6 +39,10 @@ For the selected task/feature, produce the complete 3-pillar deliverables in `04
 
 2. **API Contract (`04-deliverables/api-contracts/<feature>-api.md`)**:
    - Endpoint URL, HTTP Method, and provenance badge (`> **Provenance**: [SRC:...]`).
+   - **Contract Boundary Tag**:
+     - `Type: [INTERNAL MICROSERVICE API]` (Owned & Hosted by WEC FMC) OR
+     - `Type: [EXTERNAL SURROUNDING SYSTEM IFA]` (Integration with External Core/Vendor, e.g. Central Order, ESB, UPP).
+   - If External Surrounding IFA: Document Outbound Client Payload, Timeout/Retry policy, Circuit Breaker, and Fallout Recovery behavior.
    - Request Headers and Query Parameters with type & nullability.
    - Request JSON Schema with inline `[SRC:...]` tags for every field.
    - Success (`200 OK` / `201 Created`) and Error Responses (`400`, `401`, `409`, `500`, `504`).

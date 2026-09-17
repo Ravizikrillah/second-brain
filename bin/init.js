@@ -57,6 +57,7 @@ if (targetDir !== packageRoot) {
         "init": "node ./bin/init.js",
         "organize": "node ./bin/organize.js",
         "ingest:ddl": "node ./bin/ingest-ddl.js",
+        "ingest:apis": "node ./bin/ingest-apis.js",
         "audit": "node ./bin/audit.js",
         "test": "node ./bin/audit.js"
       }
@@ -97,7 +98,7 @@ const starterFiles = [
   },
   {
     path: '01-ground-truth/api-inventory.md',
-    content: `# API & Service Inventory\n\nAuthoritative registry of active microservices, gateways, and public/internal endpoints.\n`
+    content: `# API & Service Inventory: Ground Truth\n\n> **Canonical System Truth (Tier 1 Production Code, YAML Configs, & Tier 2 IFAs)**\n> Authoritative, disambiguated registry strictly separating **Internal Microservice APIs** from **External Surrounding Systems**.\n\n---\n\n## 🏛️ System Boundary & IFA Classification Architecture\n\n1. **🔌 Internal Microservice APIs (Owned / Inbound)**: Implemented directly within our codebase (\`repo/backend/fmc-*\`). Traffic flows inbound to our HTTP routers and gRPC servers from Frontend, APIGW, or internal peers.\n2. **🌐 External Surrounding Systems (Outbound / Integrations / Third-Party IFAs)**: Enterprise core services (CO SOM, ESB, UPP, DSC, DigiPOS, CRM, Docman, Dukcapil, ISYANA). Our microservices act as clients calling outbound APIs, or receive incoming webhook callbacks.\n\n---\n\n## 🔌 Part 1: Internal Microservice APIs (Owned Services & Endpoints)\n\n### 1.1 Microservice Topology & Port Allocations\n| Microservice Name | Runtime | HTTP Port | gRPC Port | Primary Persistence | Core Responsibility | Source Provenance |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n\n### 1.2 Active Internal Endpoints Registry\n\n---\n\n## 🌐 Part 2: External Surrounding Systems Catalog (Outbound IFAs & Webhooks)\n\n### 2.1 Surrounding Systems Master Catalog\n| System Code | System Name | Integration Role | Traffic Direction | Transport Protocol | Ownership Boundary | Authoritative Source Provenance |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n\n### 2.2 External Endpoints & Integration Operations\n`
   },
   {
     path: '02-provenance/traceability-matrix.md',

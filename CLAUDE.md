@@ -12,7 +12,7 @@ When working in this repository:
    - Markdown: `> **Provenance**: [SRC:BRD#REQ-01] | [SRC:DDL:tbl_orders]`
 5. **Commands**:
    - `/brain-init`: Initialize 6-zone folder structure and starter templates.
-   - `/brain-ingest`: Ingest raw inputs, detect conflicts, map provenance.
+   - `/brain-ingest`: Ingest raw inputs, run `ingest-ddl.js` & `ingest-apis.js` to disambiguate Internal APIs vs External Surrounding Systems, detect conflicts, map provenance.
    - `/brain-deliver`: Generate PlantUML sequence diagrams, Markdown API contracts, and LLDs.
    - `/brain-branch <name>`: Create isolated trade-off scenario in `03-constraint-branches/`.
    - `/brain-adopt <name>`: Adopt scenario via ADR and synchronize deliverables.
