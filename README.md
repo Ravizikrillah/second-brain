@@ -1,17 +1,23 @@
 # 🧠 Second Brain (`@ravizikrillah/second-brain`)
 
+[![skills.sh](https://img.shields.io/badge/skills.sh-ravizikrillah%2Fsecond--brain-blue?style=flat-square)](https://www.skills.sh/ravizikrillah/second-brain)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 > **Universal System Analyst & Architectural Second Brain for AI Agents.**  
 > Ingests unstructured BRDs, Figma specs, active DB DDL/DML, production codebases, and Meeting Minutes (MoM) to generate verified deliverables (PlantUML Sequence Diagrams, Markdown API Contracts, Low-Level Designs) with **strict provenance tracking** and **anti-gaslighting protection**.
+
+🌐 **Skills Directory Page**: [https://www.skills.sh/ravizikrillah/second-brain](https://www.skills.sh/ravizikrillah/second-brain)
 
 ---
 
 ## 🚀 Installation & Quickstart
 
-### Option A: Install via Skills CLI (`skills.sh`)
+### Option A: Install via Skills CLI ([skills.sh](https://www.skills.sh/ravizikrillah/second-brain))
 Install globally or in your current project repository for any agent (Antigravity, Cursor, Codex):
 ```bash
 npx skills add ravizikrillah/second-brain
 ```
+
 
 ### Option B: Install via Claude Code CLI Plugin
 ```bash
