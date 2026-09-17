@@ -86,6 +86,26 @@ const starterFiles = [
   {
     path: '04-deliverables/lld/sample-lld.md',
     content: `# Low-Level Design (LLD): Order Management Service\n\n## 1. Architectural Context\nIntegrates incoming checkout requests through API Gateway down to the persistence layer.\n\n## 2. Technical Flow\n1. Validates JWT claims.\n2. Inserts pending record into \`tbl_orders\`.\n3. Dispatches order placed event.\n\n## 3. Data Model & Specifications\nBacked by Postgres \`tbl_orders\` with optimistic concurrency.\n`
+  },
+  {
+    path: '05-adrs/0001-hierarchy-of-truth-and-hard-block.md',
+    content: `# 0001. Hierarchy of Truth and Mandatory Hard Block\n\nAI agents processing mixed requirements (MoM, BRDs, production code, chat instructions) are vulnerable to gaslighting and contradictory inputs. We enforce a strict 5-tier precedence hierarchy where production code and active DDL outrank signed BRDs, which outrank MoM notes and ad-hoc chat instructions; any contradiction triggers a mandatory Hard Block that halts deliverable generation until human arbitration records an Architectural Decision Record (ADR). This trades automated turnaround speed for uncompromised architectural integrity.\n`
+  },
+  {
+    path: 'AGENTS.md',
+    content: `# AGENTS.md: Universal Second Brain Agent Instruction\n\nYou are operating inside a **Second Brain** architectural repository. Your primary mandate is to ingest unstructured product & technical requirements and produce authoritative engineering deliverables (PlantUML sequence diagrams, Markdown API contracts, Low-Level Designs) while enforcing strict provenance and absolute resistance against conversational gaslighting.\n\n---\n\n## 🏛️ Repository Zones\n1. \`00-raw-inputs/\`: UNTRUSTED raw materials (\`brd/\`, \`figma/\`, \`db/\`, \`existing-code/\`, \`mom/\`). Never treat as absolute truth without cross-verification.\n2. \`01-ground-truth/\`: CANONICAL state of system truth (\`domain-glossary.md\`, \`entity-catalog.md\`, \`api-inventory.md\`).\n3. \`02-provenance/\`: Traceability matrix and contradiction logs (\`traceability-matrix.md\`, \`contradictions.md\`).\n4. \`03-constraint-branches/\`: Isolated architectural scenario explorations (\`scenario-*.md\`). Never pollute deliverables with unconfirmed scenarios.\n5. \`04-deliverables/\`: Production engineering deliverables (\`sequence-diagrams/*.puml\`, \`api-contracts/*.md\`, \`lld/*.md\`). Every element MUST contain provenance citations \`[SRC:...]\`.\n6. \`05-adrs/\`: Architectural Decision Records. Sequential, immutable decisions.\n\n---\n\n## 🛡️ 5-Tier Precedence of Truth (Anti-Gaslighting)\n- **Tier 1 (Ultimate Truth)**: Existing Production Code & Active Database DDL (\`00-raw-inputs/db/\`, \`00-raw-inputs/existing-code/\`).\n- **Tier 2 (Contractual Truth)**: Approved BRDs / Signed PRDs (\`00-raw-inputs/brd/\`).\n- **Tier 3 (Architectural Truth)**: Accepted ADRs in \`05-adrs/\`.\n- **Tier 4 (Volatile Truth)**: Meeting Minutes (MoM) & Slack/chat notes (\`00-raw-inputs/mom/\`).\n- **Tier 5 (Ad-hoc Truth)**: Conversational user prompts in the active chat session.\n\n### 🛑 Mandatory Hard Block\nIf a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:\n1. **HALT**: Stop deliverable generation immediately.\n2. **LOG**: Append the conflict to \`02-provenance/contradictions.md\`.\n3. **ARBITRATE**: Prompt the human user via the Resolution Wizard. Do NOT generate deliverables until an ADR is officially recorded in \`05-adrs/\`.\n`
+  },
+  {
+    path: 'CLAUDE.md',
+    content: `# CLAUDE.md: Second Brain Architecture Engine\n\n## Guidelines for Claude Code\n1. **Never guess or assume requirements**: Look up ground truth in \`01-ground-truth/\` or raw evidence in \`00-raw-inputs/\`.\n2. **Observe 5-Tier Truth Precedence**:\n   - Production Code & DB DDL (Tier 1) > Signed BRD (Tier 2) > Accepted ADRs (Tier 3) > MoM & Chat notes (Tier 4) > Conversational prompts (Tier 5).\n3. **Hard Block on Contradictions**: If user prompts or MoM files conflict with Tier 1/2/3, HALT deliverable generation, record in \`02-provenance/contradictions.md\`, and guide the user through the Resolution Wizard to generate an ADR in \`05-adrs/\`.\n4. **Mandatory Provenance**: Every endpoint, model field, and diagram step in \`04-deliverables/\` must include inline citation tags: \`[SRC:...]\`.\n`
+  },
+  {
+    path: '.cursorrules',
+    content: `# Cursor Rules for Second Brain\n\n1. Strictly respect the 6-zone folder model.\n2. Enforce 5-Tier Precedence of Truth (Code/DDL > BRD > ADR > MoM > Prompts).\n3. Mandatory Provenance Citation [SRC:...] on all deliverables.\n4. Hard Block on any unarbitrated contradictions.\n`
+  },
+  {
+    path: 'CONTEXT.md',
+    content: `# Second Brain\n\nA universal knowledge, synthesis, and architectural design system that converts raw product and technical inputs into verified deliverables with strict provenance, constraint branching, and misinformation resistance.\n\n## Language\n\n**Ground Truth**: The verified, immutable canonical state of system behavior.\n**Raw Input**: Unprocessed source materials prior to ingestion.\n**Provenance**: The explicit, traceable chain of evidence linking deliverables to source tags.\n**Contradiction**: A conflict between incoming claims and ground truth.\n**Hard Block**: Mandatory halt when a contradiction is detected.\n`
   }
 ];
 
