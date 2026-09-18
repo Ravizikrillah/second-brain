@@ -50,6 +50,15 @@ All commands are single-token hyphenated commands accessible in agent conversati
 | `/brain-impact <target>` | Change Request (CR) & Blast Radius Analyzer across schemas, API contracts, sequence diagrams, and consumers. |
 | `/brain-story <feature>` | Slices deliverables into Jira/Confluence-ready User Stories with Gherkin AC, API specs, and sequence slices. |
 
+### 🛠️ Specialized Engineering Skills
+
+| Skill | Description |
+| :--- | :--- |
+| `plantuml-sequence-standards` | Official PlantUML Sequence standards (`box WEC #DBEEF3`, `#DDF4DD` response note, `#F8D4AF` enhancement groups). |
+| `backend-code-to-plantuml-extractor` | Reverse engineers Go code & gRPC Protobuf into exhaustive, production-grade PlantUML sequence diagrams. |
+| `lld-generator` | Authoritative 3-Pillar Low-Level Design (LLD) document generator with GFM tables and zero ASCII box drawings. |
+| `technical-flow` | SALT/Pepper concise system-to-system flow and categorized Surrounding Systems extractor. |
+
 ---
 
 ## 🏛️ The 6-Zone Directory Architecture
