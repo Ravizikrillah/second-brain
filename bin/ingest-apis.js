@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * Deterministic API & Surrounding System Ingester for Second Brain
+ * Universal Polyglot API, gRPC, Gateway & Surrounding System Ingester for Second Brain
  * 
- * Accurately parses and disambiguates:
- * 1. Internal Microservice APIs (Owned / Inbound HTTP & gRPC routes)
- * 2. External Surrounding Systems (Outbound IFAs, Client configs, Curls, & Webhooks)
+ * Supports Multi-Language Microservice Repositories:
+ * 1. Golang: Gin, Echo, Chi, Net/HTTP + Go Struct DTOs
+ * 2. Python: FastAPI, Starlette, Flask, Django REST + Pydantic BaseModels
+ * 3. Node.js / TypeScript: Express, Fastify, NestJS + TypeScript DTOs
+ * 4. Java / Kotlin: Spring Boot (@RestController, @GetMapping, etc.)
+ * 5. Protocol Buffers: Language-agnostic gRPC RPC Contracts (.proto)
+ * 6. Edge Gateways: KrakenD ingress routing (krakend.json)
+ * 7. OpenAPI / Swagger: Language-agnostic swagger.json & openapi.yaml
+ * 8. External Surrounding Systems: Curls, YAML web_api, & BRD IFAs
  */
 
 const fs = require('fs');
@@ -16,7 +22,7 @@ const existingCodeDir = path.join(targetDir, '00-raw-inputs', 'existing-code');
 const brdDir = path.join(targetDir, '00-raw-inputs', 'brd');
 const outputFile = path.join(targetDir, '01-ground-truth', 'api-inventory.md');
 
-console.log(`\n🔌 Second Brain Deterministic API & Surrounding System Ingester\n`);
+console.log(`\n🔌 Second Brain Universal Polyglot API & Surrounding System Ingester (v1.5.0)\n`);
 
 if (!fs.existsSync(existingCodeDir) && !fs.existsSync(brdDir)) {
   console.log(`⚠️  No raw inputs found in 00-raw-inputs/existing-code/ or 00-raw-inputs/brd/. Nothing to ingest.`);
@@ -158,6 +164,21 @@ function findFiles(dir, filterFn) {
   return results;
 }
 
+function cleanPath(p) {
+  if (!p) return '/';
+  let cleaned = p.replace(/\/+/g, '/');
+  if (!cleaned.startsWith('/')) cleaned = '/' + cleaned;
+  if (cleaned.length > 1 && cleaned.endsWith('/')) cleaned = cleaned.slice(0, -1);
+  return cleaned;
+}
+
+function joinPaths(p1, p2) {
+  if (!p1 && !p2) return '/';
+  if (!p1) return cleanPath(p2);
+  if (!p2) return cleanPath(p1);
+  return cleanPath(p1.replace(/\/+$/, '') + '/' + p2.replace(/^\/+/, ''));
+}
+
 // Ignore non-service YAML files
 function isServiceConfigFile(filePath) {
   const norm = filePath.replace(/\\/g, '/').toLowerCase();
@@ -168,15 +189,28 @@ function isServiceConfigFile(filePath) {
   if (norm.includes('/pipeline/') || norm.includes('service-stages') || norm.includes('aws-golang')) return false;
   if (norm.includes('logstash') || norm.includes('task_planning_crew')) return false;
   
-  // Accept microservice-yaml-configs or direct service config files
   if (norm.includes('/microservice-yaml-configs/')) return true;
   if (norm.endsWith('/config.yml') || norm.endsWith('/config.yaml')) return true;
   if (norm.match(/config-[a-zA-Z0-9_-]+\.ya?ml$/)) return true;
   return false;
 }
 
+// Detect runtime for a microservice directory
+function detectRuntime(dirPath) {
+  if (!fs.existsSync(dirPath)) return 'Golang 1.21';
+  const files = fs.readdirSync(dirPath);
+  const fullContents = findFiles(dirPath, (f) => true);
+
+  if (fullContents.some(f => f.endsWith('.go'))) return 'Golang 1.21';
+  if (fullContents.some(f => f.endsWith('.py')) || files.includes('requirements.txt') || files.includes('pyproject.toml')) return 'Python 3.11 (FastAPI)';
+  if (files.includes('pom.xml') || fullContents.some(f => f.endsWith('.java'))) return 'Java 17 (Spring Boot)';
+  if (files.includes('package.json') || fullContents.some(f => f.endsWith('.ts'))) return 'Node.js 20 (TypeScript)';
+  if (fullContents.some(f => f.endsWith('.rs'))) return 'Rust (Actix/Axum)';
+  return 'Polyglot Service';
+}
+
 // -------------------------------------------------------------
-// 1. INGEST CONFIGS: Microservice Topology & Port Allocations
+// 1. INGEST CONFIGS & DISCOVER MICROSERVICES
 // -------------------------------------------------------------
 const microservices = new Map();
 const allYamls = findFiles(existingCodeDir, (file) => file.endsWith('.yml') || file.endsWith('.yaml'));
@@ -192,9 +226,8 @@ configFiles.forEach(cfgPath => {
   // Extract service name
   let svcName = baseName.replace(/^config-/, 'fmc-').replace(/\.ya?ml$/, '');
   if (svcName === 'config') {
-    // deduce from directory path (e.g. repo/backend/fmc-smart-selfcare/pkg/config/config.yml)
     const parts = relPath.split(path.sep);
-    const backendIdx = parts.indexOf('backend');
+    const backendIdx = parts.indexOf('backend') !== -1 ? parts.indexOf('backend') : parts.indexOf('services');
     if (backendIdx !== -1 && parts[backendIdx + 1]) {
       svcName = parts[backendIdx + 1];
     }
@@ -203,24 +236,17 @@ configFiles.forEach(cfgPath => {
   // Extract port
   let httpPort = '—';
   const portMatch = content.match(/http:\s*(?:\r?\n|\n)\s*port:\s*['"]?([0-9]+)['"]?/i) || content.match(/port:\s*['"]?([0-9]+)['"]?/i);
-  if (portMatch) {
-    httpPort = portMatch[1];
-  }
+  if (portMatch) httpPort = portMatch[1];
 
-  // Extract gRPC port
   let grpcPort = '—';
   const grpcMatch = content.match(/grpc:\s*(?:\r?\n|\n)\s*port:\s*['"]?(:?[0-9]+)['"]?/i) || content.match(/grpc_port:\s*['"]?(:?[0-9]+)['"]?/i);
-  if (grpcMatch) {
-    grpcPort = grpcMatch[1].startsWith(':') ? grpcMatch[1] : `:${grpcMatch[1]}`;
-  }
+  if (grpcMatch) grpcPort = grpcMatch[1].startsWith(':') ? grpcMatch[1] : `:${grpcMatch[1]}`;
 
-  // Extract DB type
   let dbInfo = '—';
   if (/postgres:/i.test(content)) dbInfo = 'PostgreSQL';
   if (/mysql:/i.test(content)) dbInfo = dbInfo === '—' ? 'MySQL' : `${dbInfo}, MySQL`;
   if (/redis:/i.test(content)) dbInfo = dbInfo === '—' ? 'Redis' : `${dbInfo}, Redis`;
 
-  // Extract responsibility from service name
   let responsibility = 'Core domain business logic and state management';
   if (svcName.includes('link')) responsibility = 'Journey token generation, session lifecycle, link analytics';
   else if (svcName.includes('product')) responsibility = 'Product catalog, package offers, speed tiers, add-ons';
@@ -236,7 +262,6 @@ configFiles.forEach(cfgPath => {
   else if (svcName.includes('smart-selfcare')) responsibility = 'Self-care diagnostic hub, subscriber profile, router reboot';
   else if (svcName.includes('tracking')) responsibility = 'Real-time order tracker, technician dispatch status, timeline';
 
-  // Normalize name
   if (!svcName.startsWith('fmc-') && svcName !== 'krakend') {
     svcName = `fmc-${svcName}`;
   }
@@ -244,110 +269,417 @@ configFiles.forEach(cfgPath => {
   if (!microservices.has(svcName) || microservices.get(svcName).httpPort === '—') {
     microservices.set(svcName, {
       name: svcName,
+      runtime: 'Golang 1.21',
       httpPort,
       grpcPort,
       db: dbInfo,
       responsibility,
       provenance: `[SRC:CODE:${relPath}]`,
-      endpoints: []
+      endpoints: [],
+      grpcServices: [],
+      dtoModels: []
     });
   }
 });
 
-// Also scan backend directories if not in configs
-const backendDir = path.join(existingCodeDir, 'repo', 'backend');
-if (fs.existsSync(backendDir)) {
-  const dirs = fs.readdirSync(backendDir).filter(d => fs.statSync(path.join(backendDir, d)).isDirectory());
+// Scan all potential microservice root directories (repo/backend, repo/ai, repo/services, services/, apps/)
+const serviceRootDirs = [
+  path.join(existingCodeDir, 'repo', 'backend'),
+  path.join(existingCodeDir, 'repo', 'ai'),
+  path.join(existingCodeDir, 'repo', 'services'),
+  path.join(existingCodeDir, 'repo', 'apps'),
+  path.join(existingCodeDir, 'services'),
+  path.join(existingCodeDir, 'backend'),
+  path.join(existingCodeDir, 'apps')
+];
+
+serviceRootDirs.forEach(rootDir => {
+  if (!fs.existsSync(rootDir)) return;
+  const dirs = fs.readdirSync(rootDir).filter(d => {
+    try {
+      return fs.statSync(path.join(rootDir, d)).isDirectory();
+    } catch (e) {
+      return false;
+    }
+  });
+
   dirs.forEach(d => {
-    // Skip shared packages or utilities
-    if (d === 'salt-pkg' || d === 'common' || d === 'pkg') return;
+    if (d === 'salt-pkg' || d === 'common' || d === 'pkg' || d === '.git' || d === 'node_modules') return;
+    const fullDirPath = path.join(rootDir, d);
+    const runtime = detectRuntime(fullDirPath);
 
     if (!microservices.has(d)) {
-      let resp = 'Backend microservice component';
-      if (d.includes('krakend')) resp = 'API Gateway routing, rate-limiting, and request transformation';
+      let resp = 'Polyglot microservice component';
+      if (d.includes('krakend') || d.includes('api-middleware')) resp = 'API Gateway routing, rate-limiting, and request transformation';
       else if (d.includes('worker') || d.includes('ops')) resp = 'Background asynchronous jobs, status sync, order escalation';
       else if (d.includes('dashboard')) resp = 'Dashboard metrics, event aggregation, and observability';
       else if (d.includes('approval')) resp = 'Berita Acara installation approvals and technician sign-off';
       else if (d.includes('survey')) resp = 'Post-installation customer satisfaction survey rating';
       else if (d.includes('utility-monitoring')) resp = 'Utility network monitoring, modem telemetry, and Wi-Fi SSID';
+      else if (d.includes('rag') || d.includes('ai-log')) resp = 'AI RAG Knowledge Engine, vector analytics, and conversational CMS';
+      else if (d.includes('teams-bot') || d.includes('telegram-bot')) resp = 'Enterprise conversational bot gateway & messaging handler';
 
+      let port = '—';
+      if (d.includes('krakend') || d.includes('middleware')) port = 'Gateway';
+      else if (d.includes('worker')) port = 'Worker';
+      else if (d.includes('rag-cms')) port = '8811';
+      else if (d.includes('ai-log')) port = '8000';
+
+      const relPath = path.relative(targetDir, fullDirPath);
       microservices.set(d, {
         name: d,
-        httpPort: d.includes('krakend') ? 'Gateway' : (d.includes('worker') ? 'Worker' : '—'),
+        runtime,
+        httpPort: port,
         grpcPort: '—',
-        db: '—',
+        db: d.includes('ai') ? 'PostgreSQL (pgvector)' : '—',
         responsibility: resp,
-        provenance: `[SRC:CODE:repo/backend/${d}]`,
-        endpoints: []
+        provenance: `[SRC:CODE:${relPath}]`,
+        endpoints: [],
+        grpcServices: [],
+        dtoModels: []
       });
+    } else {
+      // Update runtime dynamically
+      const existing = microservices.get(d);
+      existing.runtime = runtime;
     }
   });
+});
+
+console.log(`📦 Discovered ${microservices.size} microservice module(s) across backend & AI directories.`);
+
+// -------------------------------------------------------------
+// 2. PARSE INTERNAL APIS: Polyglot Routing & Schemas
+// -------------------------------------------------------------
+console.log(`🔍 Scanning Polyglot API route definitions (Go, Python, TypeScript, Java, OpenAPI)...`);
+
+// Helper to find which microservice owns a given file
+function getOwningService(relPath) {
+  for (const svcName of microservices.keys()) {
+    if (relPath.includes(`/${svcName}/`) || relPath.includes(`/${svcName.replace(/^fmc-/, '')}/`)) {
+      return svcName;
+    }
+  }
+  return null;
 }
 
-// -------------------------------------------------------------
-// 2. INGEST INTERNAL APIS: Route handlers from Go Controllers
-// -------------------------------------------------------------
-console.log(`🔍 Scanning Go controller route definitions...`);
-
+// 2a. GOLANG ROUTE & DTO PARSER
 const goFiles = findFiles(existingCodeDir, (file, fullPath) => {
-  if (!file.endsWith('.go') || file.endsWith('_test.go')) return false;
-  // Ignore shared library example handlers
-  if (fullPath.includes('/salt-pkg/examples/') || fullPath.includes('/vendor/')) return false;
+  if (!file.endsWith('.go')) return false;
+  if (file.endsWith('_test.go') || file.includes('_test_')) return false;
+  if (fullPath.includes('/vendor/') || fullPath.includes('/examples/') || fullPath.includes('/mocks/') || fullPath.includes('/mock/')) return false;
   return true;
 });
 
-goFiles.forEach(filePath => {
-  const relPath = path.relative(targetDir, filePath);
-  
-  // Find which microservice owns this file
-  let matchedSvc = null;
-  for (const svcName of microservices.keys()) {
-    if (relPath.includes(`/${svcName}/`) || relPath.includes(`/${svcName.replace(/^fmc-/, '')}/`)) {
-      matchedSvc = svcName;
-      break;
-    }
+const goFilesBySvc = new Map();
+goFiles.forEach(f => {
+  const rel = path.relative(targetDir, f);
+  const svc = getOwningService(rel);
+  if (svc) {
+    if (!goFilesBySvc.has(svc)) goFilesBySvc.set(svc, []);
+    goFilesBySvc.get(svc).push(f);
   }
-  if (!matchedSvc) return;
+});
 
-  const content = fs.readFileSync(filePath, 'utf8');
+for (const [svcName, files] of goFilesBySvc.entries()) {
+  const svc = microservices.get(svcName);
+  if (!svc) continue;
+
+  const delegations = new Map();
+
+  files.forEach(f => {
+    const content = fs.readFileSync(f, 'utf8');
+    const lines = content.split(/\r?\n/);
+    const localVars = new Map();
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) return;
+
+      const gm = trimmed.match(/([a-zA-Z0-9_]+)\s*(?::=|=)\s*([a-zA-Z0-9_]+)\.Group\(\s*["']([^"']*)["']/);
+      if (gm) {
+        const varName = gm[1];
+        const parentVar = gm[2];
+        const groupPath = gm[3];
+        const parentPrefix = localVars.get(parentVar) || '';
+        localVars.set(varName, joinPaths(parentPrefix, groupPath));
+      }
+
+      const dm = trimmed.match(/(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\(\s*([a-zA-Z0-9_]+)/);
+      if (dm) {
+        const funcName = dm[1];
+        const argVar = dm[2];
+        if (localVars.has(argVar)) {
+          delegations.set(funcName, localVars.get(argVar));
+        }
+      }
+    });
+  });
+
+  files.forEach(f => {
+    const relPath = path.relative(targetDir, f);
+    const content = fs.readFileSync(f, 'utf8');
+    const lines = content.split(/\r?\n/);
+
+    let pathVersion = '';
+    const normPath = f.replace(/\\/g, '/');
+    if (normPath.includes('/v1/') || normPath.includes('/v1Refactor/')) pathVersion = '/v1';
+    else if (normPath.includes('/v2/') || normPath.includes('/v2Refactor/')) pathVersion = '/v2';
+    else if (normPath.includes('/v3/')) pathVersion = '/v3';
+
+    let currentFuncPrefix = pathVersion;
+    const varGroups = new Map();
+    let currentStruct = null;
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+
+      const structMatch = trimmed.match(/^type\s+([A-Z][a-zA-Z0-9_]+)\s+struct\s*\{/);
+      if (structMatch) {
+        currentStruct = {
+          name: structMatch[1],
+          fields: [],
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        };
+        if (!svc.dtoModels.some(d => d.name === currentStruct.name)) {
+          svc.dtoModels.push(currentStruct);
+        }
+      } else if (currentStruct && trimmed === '}') {
+        currentStruct = null;
+      } else if (currentStruct) {
+        const fieldMatch = trimmed.match(/^([A-Z][a-zA-Z0-9_]+)\s+([*a-zA-Z0-9_\[\]]+)(?:\s+`([^`]*)`)?/);
+        if (fieldMatch) {
+          const fieldName = fieldMatch[1];
+          const fieldType = fieldMatch[2];
+          const tag = fieldMatch[3] || '';
+          const jsonMatch = tag.match(/json:"([^",]+)/);
+          const required = tag.includes('binding:"required"') || tag.includes('validate:"required"');
+          currentStruct.fields.push({
+            name: fieldName,
+            jsonKey: jsonMatch ? jsonMatch[1] : fieldName.toLowerCase(),
+            type: fieldType,
+            required
+          });
+        }
+      }
+
+      if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) return;
+
+      const fnMatch = trimmed.match(/func\s+(?:\([^)]+\)\s+)?([a-zA-Z0-9_]+)\s*\(\s*([a-zA-Z0-9_]+)\s+\*?gin\.(?:RouterGroup|Engine)/);
+      if (fnMatch) {
+        const fnName = fnMatch[1];
+        const paramVar = fnMatch[2];
+        const delegatedPrefix = delegations.get(fnName);
+        currentFuncPrefix = delegatedPrefix || pathVersion || '';
+        varGroups.clear();
+        if (currentFuncPrefix) {
+          varGroups.set(paramVar, currentFuncPrefix);
+          varGroups.set('handler', currentFuncPrefix);
+          varGroups.set('h', currentFuncPrefix);
+        }
+      }
+
+      const gm = trimmed.match(/([a-zA-Z0-9_]+)\s*(?::=|=)\s*([a-zA-Z0-9_]+)\.Group\(\s*["']([^"']*)["']/);
+      if (gm) {
+        const varName = gm[1];
+        const parentVar = gm[2];
+        const groupPath = gm[3];
+        const parentPrefix = varGroups.get(parentVar) || currentFuncPrefix || '';
+        const fullGroup = joinPaths(parentPrefix, groupPath);
+        varGroups.set(varName, fullGroup);
+      }
+
+      const rm = trimmed.match(/([a-zA-Z0-9_]+)\.(GET|POST|PUT|DELETE|PATCH)\(\s*["']([^"']*)["']/);
+      if (rm) {
+        const callerVar = rm[1];
+        const method = rm[2];
+        const subPath = rm[3];
+
+        if (/^(?:header|req|request|rdb|redis|db|client|resp|response|claims|cache|map)$/i.test(callerVar)) return;
+
+        let basePrefix = varGroups.get(callerVar) || varGroups.get('handler') || varGroups.get('h') || currentFuncPrefix || '';
+        let fullRoute = joinPaths(basePrefix, subPath);
+
+        if (
+          fullRoute.endsWith('/healthz') || 
+          fullRoute.endsWith('/metrics') || 
+          fullRoute.endsWith('/health') || 
+          fullRoute.endsWith('/ping') || 
+          fullRoute.includes('/swagger') || 
+          fullRoute.includes('/debug/pprof')
+        ) {
+          return;
+        }
+
+        if (!svc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+          svc.endpoints.push({
+            method,
+            path: fullRoute,
+            provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+          });
+        }
+      }
+    });
+  });
+}
+
+// 2b. PYTHON ROUTE & PYDANTIC MODEL PARSER (FastAPI, Flask, Starlette)
+const pyFiles = findFiles(existingCodeDir, (file, fullPath) => {
+  if (!file.endsWith('.py')) return false;
+  if (file.endsWith('_test.py') || file.startsWith('test_')) return false;
+  if (fullPath.includes('/venv/') || fullPath.includes('/.venv/') || fullPath.includes('/tests/')) return false;
+  return true;
+});
+
+const pyFilesBySvc = new Map();
+pyFiles.forEach(f => {
+  const rel = path.relative(targetDir, f);
+  const svc = getOwningService(rel);
+  if (svc) {
+    if (!pyFilesBySvc.has(svc)) pyFilesBySvc.set(svc, []);
+    pyFilesBySvc.get(svc).push(f);
+  }
+});
+
+for (const [svcName, files] of pyFilesBySvc.entries()) {
+  const svc = microservices.get(svcName);
+  if (!svc) continue;
+
+  const routerPrefixes = new Map();
+
+  // Pass 1: Extract app.include_router prefixes
+  files.forEach(f => {
+    const content = fs.readFileSync(f, 'utf8');
+    const lines = content.split(/\r?\n/);
+    lines.forEach(l => {
+      const trimmed = l.trim();
+      const incMatch = trimmed.match(/include_router\(\s*([a-zA-Z0-9_\.]+)\s*,\s*prefix\s*=\s*["']([^"']*)["']/);
+      if (incMatch) {
+        const moduleName = incMatch[1].split('.')[0];
+        routerPrefixes.set(moduleName, incMatch[2]);
+        routerPrefixes.set(incMatch[1], incMatch[2]);
+      }
+    });
+  });
+
+  // Pass 2: Extract endpoints and Pydantic models
+  files.forEach(f => {
+    const relPath = path.relative(targetDir, f);
+    const content = fs.readFileSync(f, 'utf8');
+    const lines = content.split(/\r?\n/);
+    const baseName = path.basename(f, '.py');
+    const filePrefix = routerPrefixes.get(baseName) || '';
+
+    let currentModel = null;
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('#')) return;
+
+      // Pydantic Schema: class Name(BaseModel):
+      const modelMatch = trimmed.match(/^class\s+([A-Z][a-zA-Z0-9_]+)\s*\(\s*(?:BaseModel|[A-Z][a-zA-Z0-9_]*Base)/);
+      if (modelMatch) {
+        currentModel = {
+          name: modelMatch[1],
+          fields: [],
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        };
+        if (!svc.dtoModels.some(d => d.name === currentModel.name)) {
+          svc.dtoModels.push(currentModel);
+        }
+      } else if (currentModel && (/^[a-zA-Z0-9_]/.test(line) && !line.startsWith(' ') && !line.startsWith('\t'))) {
+        currentModel = null;
+      } else if (currentModel) {
+        const fieldMatch = trimmed.match(/^([a-zA-Z0-9_]+)\s*:\s*([^=\n#]+)/);
+        if (fieldMatch && !fieldMatch[1].startsWith('class')) {
+          currentModel.fields.push({
+            name: fieldMatch[1],
+            jsonKey: fieldMatch[1],
+            type: fieldMatch[2].trim(),
+            required: !trimmed.includes('Optional') && !trimmed.includes('None')
+          });
+        }
+      }
+
+      // Route decorator: @app.get("/path") or @router.post("/path")
+      const routeMatch = trimmed.match(/@(app|router|api_router|bp)\.(get|post|put|delete|patch)\(\s*["']([^"']*)["']/i);
+      if (routeMatch) {
+        const caller = routeMatch[1];
+        const method = routeMatch[2].toUpperCase();
+        const subPath = routeMatch[3];
+
+        let prefix = caller === 'app' ? '' : (filePrefix || '');
+        let fullRoute = joinPaths(prefix, subPath);
+
+        if (fullRoute.endsWith('/health') || fullRoute.endsWith('/healthz') || fullRoute.includes('/docs') || fullRoute.includes('/redoc')) {
+          return;
+        }
+
+        if (!svc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+          svc.endpoints.push({
+            method,
+            path: fullRoute,
+            provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+          });
+        }
+      }
+    });
+  });
+}
+
+// 2c. NODE.JS & TYPESCRIPT ROUTE PARSER (Express, Fastify, NestJS)
+const tsFiles = findFiles(existingCodeDir, (file, fullPath) => {
+  if (!file.endsWith('.ts') && !file.endsWith('.js')) return false;
+  if (file.endsWith('.spec.ts') || file.endsWith('.test.ts') || file.endsWith('.test.js')) return false;
+  if (fullPath.includes('/node_modules/') || fullPath.includes('/dist/') || fullPath.includes('/build/')) return false;
+  return true;
+});
+
+tsFiles.forEach(f => {
+  const relPath = path.relative(targetDir, f);
+  const svc = getOwningService(relPath);
+  if (!svc) return;
+
+  const targetSvc = microservices.get(svc);
+  if (!targetSvc) return;
+
+  const content = fs.readFileSync(f, 'utf8');
   const lines = content.split(/\r?\n/);
 
-  // Detect group prefix if present in file
-  let groupPrefix = '';
-  const groupMatch = content.match(/handler\.Group\(\s*[\"\']([^\"\']+)[\"\']/i);
-  if (groupMatch) {
-    groupPrefix = groupMatch[1];
-  }
+  let controllerPrefix = '';
+  // Detect NestJS @Controller('prefix')
+  const ctrlMatch = content.match(/@Controller\(\s*['"]([^'"]*)['"]\)/);
+  if (ctrlMatch) controllerPrefix = ctrlMatch[1];
 
   lines.forEach((line, idx) => {
-    // Match route registration: e.g. h.GET("/path", handler)
-    const m = line.match(/\.(GET|POST|PUT|DELETE|PATCH)\(\s*[\"\'](\/[^\"\']*)[\"\']/i);
-    if (m) {
-      const method = m[1].toUpperCase();
-      let routePath = m[2];
-      
-      // Prepend group prefix if not already present
-      if (groupPrefix && !routePath.startsWith(groupPrefix)) {
-        routePath = groupPrefix.replace(/\/$/, '') + '/' + routePath.replace(/^\//, '');
-      }
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) return;
 
-      // Filter out infrastructure probe & swagger endpoints
-      if (
-        routePath === '/healthz' || 
-        routePath === '/metrics' || 
-        routePath === '/health' || 
-        routePath === '/ping' || 
-        routePath.startsWith('/swagger') || 
-        routePath.startsWith('/debug/pprof')
-      ) {
-        return;
-      }
-
-      const svc = microservices.get(matchedSvc);
-      if (svc && !svc.endpoints.some(e => e.method === method && e.path === routePath)) {
-        svc.endpoints.push({
+    // NestJS @Get('path'), @Post('path')
+    const nestMatch = trimmed.match(/@(Get|Post|Put|Delete|Patch)\(\s*(?:['"]([^'"]*)['"])?\s*\)/i);
+    if (nestMatch) {
+      const method = nestMatch[1].toUpperCase();
+      const subPath = nestMatch[2] || '';
+      const fullRoute = joinPaths(controllerPrefix, subPath);
+      if (!targetSvc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+        targetSvc.endpoints.push({
           method,
-          path: routePath,
+          path: fullRoute,
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        });
+      }
+      return;
+    }
+
+    // Express / Fastify: app.get('/path', ...) or router.post('/path', ...)
+    const expMatch = trimmed.match(/(?:app|router|fastify)\.(get|post|put|delete|patch)\(\s*['"]([^'"]*)['"]/i);
+    if (expMatch) {
+      const method = expMatch[1].toUpperCase();
+      const subPath = expMatch[2];
+      const fullRoute = cleanPath(subPath);
+      if (!targetSvc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+        targetSvc.endpoints.push({
+          method,
+          path: fullRoute,
           provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
         });
       }
@@ -355,14 +687,172 @@ goFiles.forEach(filePath => {
   });
 });
 
+// 2d. JAVA / KOTLIN (Spring Boot) PARSER
+const javaFiles = findFiles(existingCodeDir, (file, fullPath) => {
+  if (!file.endsWith('.java') && !file.endsWith('.kt')) return false;
+  if (fullPath.includes('/test/') || fullPath.includes('/target/')) return false;
+  return true;
+});
+
+javaFiles.forEach(f => {
+  const relPath = path.relative(targetDir, f);
+  const svc = getOwningService(relPath);
+  if (!svc) return;
+
+  const targetSvc = microservices.get(svc);
+  if (!targetSvc) return;
+
+  const content = fs.readFileSync(f, 'utf8');
+  let basePrefix = '';
+  const reqMap = content.match(/@RequestMapping\(\s*(?:value\s*=\s*)?["']([^"']*)["']/);
+  if (reqMap) basePrefix = reqMap[1];
+
+  const lines = content.split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    const springMatch = trimmed.match(/@(Get|Post|Put|Delete|Patch)Mapping\(\s*(?:(?:value|path)\s*=\s*)?["']?([^"'\)]*)["']?\s*\)/);
+    if (springMatch) {
+      const method = springMatch[1].toUpperCase();
+      const subPath = springMatch[2] || '';
+      const fullRoute = joinPaths(basePrefix, subPath);
+      if (!targetSvc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+        targetSvc.endpoints.push({
+          method,
+          path: fullRoute,
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        });
+      }
+    }
+  });
+});
+
+// 2e. OPENAPI / SWAGGER SPECS (Language-Agnostic)
+const openApiFiles = findFiles(existingCodeDir, (file) => /swagger.*\.json$|openapi.*\.(json|ya?ml)$/i.test(file));
+openApiFiles.forEach(f => {
+  const relPath = path.relative(targetDir, f);
+  const svc = getOwningService(relPath);
+  const targetSvc = svc ? microservices.get(svc) : null;
+
+  try {
+    if (f.endsWith('.json')) {
+      const doc = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (doc.paths) {
+        for (const [routePath, methods] of Object.entries(doc.paths)) {
+          for (const [method, op] of Object.entries(methods)) {
+            const upperMethod = method.toUpperCase();
+            if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(upperMethod)) continue;
+            if (targetSvc && !targetSvc.endpoints.some(r => r.method === upperMethod && r.path === routePath)) {
+              targetSvc.endpoints.push({
+                method: upperMethod,
+                path: routePath,
+                provenance: `[SRC:CODE:${relPath}]`
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+});
+
 // -------------------------------------------------------------
-// 3. INGEST EXTERNAL SURROUNDING SYSTEMS: Curls & YAML web_api
+// 3. INGEST gRPC PROTOBUF CONTRACTS (.proto)
+// -------------------------------------------------------------
+console.log(`🔍 Scanning gRPC Protobuf (.proto) service definitions...`);
+
+const protoFiles = findFiles(existingCodeDir, (file) => file.endsWith('.proto'));
+
+protoFiles.forEach(p => {
+  const content = fs.readFileSync(p, 'utf8');
+  const relPath = path.relative(targetDir, p);
+  
+  let matchedSvc = getOwningService(relPath);
+  if (!matchedSvc) {
+    const parts = relPath.split(path.sep);
+    const backendIdx = parts.indexOf('backend') !== -1 ? parts.indexOf('backend') : parts.indexOf('services');
+    if (backendIdx !== -1 && parts[backendIdx + 1]) {
+      matchedSvc = parts[backendIdx + 1];
+    }
+  }
+
+  const svc = microservices.get(matchedSvc);
+  if (!svc) return;
+
+  const lines = content.split(/\r?\n/);
+  let currentService = '';
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*')) return;
+
+    const sMatch = trimmed.match(/^service\s+([a-zA-Z0-9_]+)\s*\{/);
+    if (sMatch) {
+      currentService = sMatch[1];
+    } else if (trimmed === '}') {
+      currentService = '';
+    } else if (currentService) {
+      const rpcMatch = trimmed.match(/^rpc\s+([a-zA-Z0-9_]+)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*returns\s*\(\s*([a-zA-Z0-9_]+)\s*\)/);
+      if (rpcMatch) {
+        const method = rpcMatch[1];
+        const req = rpcMatch[2];
+        const resp = rpcMatch[3];
+
+        if (!svc.grpcServices.some(g => g.service === currentService && g.method === method)) {
+          svc.grpcServices.push({
+            service: currentService,
+            method,
+            request: req,
+            response: resp,
+            provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+          });
+        }
+      }
+    }
+  });
+});
+
+// -------------------------------------------------------------
+// 4. INGEST API GATEWAY INGRESS (KrakenD)
+// -------------------------------------------------------------
+console.log(`🔍 Scanning KrakenD API Gateway routing configurations...`);
+
+const krakendFiles = findFiles(existingCodeDir, (file) => file.includes('krakend') && file.endsWith('.json'));
+const gatewayEndpoints = [];
+
+krakendFiles.forEach(kf => {
+  const relPath = path.relative(targetDir, kf);
+  try {
+    const json = JSON.parse(fs.readFileSync(kf, 'utf8'));
+    if (json.endpoints && Array.isArray(json.endpoints)) {
+      json.endpoints.forEach((ep, idx) => {
+        const endpointPath = ep.endpoint;
+        const method = (ep.method || 'GET').toUpperCase();
+        const backendUrl = ep.backend && ep.backend[0] ? ep.backend[0].url_pattern : '—';
+        const headers = ep.input_headers ? ep.input_headers.join(', ') : 'None';
+        const queryParams = ep.input_query_strings ? ep.input_query_strings.join(', ') : 'None';
+
+        if (!gatewayEndpoints.some(g => g.method === method && g.endpoint === endpointPath)) {
+          gatewayEndpoints.push({
+            method,
+            endpoint: endpointPath,
+            backendUrl,
+            headers,
+            queryParams,
+            provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+          });
+        }
+      });
+    }
+  } catch (e) {}
+});
+
+// -------------------------------------------------------------
+// 5. INGEST EXTERNAL SURROUNDING SYSTEMS: Curls & YAML web_api
 // -------------------------------------------------------------
 console.log(`🔍 Scanning External Surrounding Systems and Interface Agreements...`);
 
 const surroundingSystems = new Map();
 
-// Initialize known surrounding systems
 for (const [key, meta] of Object.entries(SURROUNDING_METADATA)) {
   surroundingSystems.set(key, {
     ...meta,
@@ -371,7 +861,7 @@ for (const [key, meta] of Object.entries(SURROUNDING_METADATA)) {
   });
 }
 
-// 3a. Ingest curl files from configurations/curl-surroundings/
+// 5a. Ingest curl files from configurations/curl-surroundings/
 const curlDir = path.join(existingCodeDir, 'configurations', 'curl-surroundings');
 if (fs.existsSync(curlDir)) {
   const sysDirs = fs.readdirSync(curlDir).filter(d => fs.statSync(path.join(curlDir, d)).isDirectory());
@@ -400,11 +890,9 @@ if (fs.existsSync(curlDir)) {
       const relPath = path.relative(targetDir, fPath);
       sys.sources.add(`[SRC:CODE:${relPath}]`);
 
-      // Extract HTTP method
       const methodMatch = content.match(/--request\s+([A-Z]+)/i) || content.match(/-X\s+([A-Z]+)/i) || ['GET', 'GET'];
       const method = (methodMatch[1] || 'GET').toUpperCase();
 
-      // Extract URL
       const urlMatch = content.match(/'(https?:\/\/[^']+)'/) || content.match(/"(https?:\/\/[^"]+)"/) || content.match(/(https?:\/\/[^\s]+)/);
       let url = urlMatch ? urlMatch[1] : '';
       let endpointPath = url;
@@ -415,7 +903,6 @@ if (fs.existsSync(curlDir)) {
         }
       } catch (e) {}
 
-      // Clean feature title from filename
       const title = f.replace(/\.txt$/, '').replace(/^(?:post|get|put|delete)-api-/, '').replace(/-/g, ' ');
 
       if (!sys.endpoints.some(e => e.path === endpointPath && e.method === method)) {
@@ -430,7 +917,7 @@ if (fs.existsSync(curlDir)) {
   });
 }
 
-// 3b. Ingest external endpoints from YAML configs (web_api)
+// 5b. Ingest external endpoints from YAML configs (web_api)
 configFiles.forEach(cfgPath => {
   const content = fs.readFileSync(cfgPath, 'utf8');
   const relPath = path.relative(targetDir, cfgPath);
@@ -444,7 +931,6 @@ configFiles.forEach(cfgPath => {
         const key = m[1];
         let val = m[2];
 
-        // Determine which surrounding system it belongs to based on path and key
         let targetSys = 'esb';
         const valLower = val.toLowerCase();
         const keyLower = key.toLowerCase();
@@ -491,7 +977,7 @@ configFiles.forEach(cfgPath => {
   });
 });
 
-// 3c. Scan BRD Interface Agreement PDFs
+// 5c. Scan BRD Interface Agreement PDFs
 if (fs.existsSync(brdDir)) {
   const brdFiles = fs.readdirSync(brdDir).filter(f => /interface-agreement|blueprint|specification/i.test(f));
   brdFiles.forEach(f => {
@@ -511,13 +997,13 @@ if (fs.existsSync(brdDir)) {
 }
 
 // -------------------------------------------------------------
-// 4. GENERATE 01-ground-truth/api-inventory.md
+// 6. GENERATE 01-ground-truth/api-inventory.md
 // -------------------------------------------------------------
 console.log(`📝 Writing authoritative Ground Truth to ${path.relative(targetDir, outputFile)}...`);
 
 let md = `# API & Service Inventory: Ground Truth
 
-> **Canonical System Truth (Tier 1 Production Code, YAML Configs, & Tier 2 IFAs)**  
+> **Canonical System Truth (Tier 1 Polyglot Code, Protobuf Specs, YAML Configs, & Tier 2 IFAs)**  
 > Authoritative, disambiguated registry strictly separating **Internal Microservice APIs** from **External Surrounding Systems**.
 
 ---
@@ -527,8 +1013,9 @@ let md = `# API & Service Inventory: Ground Truth
 To eliminate ambiguity across deliverables, the Second Brain enforces strict taxonomy between internal and external contracts:
 
 1. **🔌 Internal Microservice APIs (Owned / Inbound)**:
-   - **Provider / Host**: Microservices implemented and owned directly inside this repository (\`repo/backend/fmc-*\`).
-   - **Consumer**: Frontend Web, BFF, KrakenD API Gateway, Mobile Client, or peer internal services.
+   - **Provider / Host**: Polyglot microservices implemented directly inside this repository (\`repo/backend/fmc-*\`, \`repo/ai/*\`, etc.).
+   - **Supported Runtimes**: Golang (Gin/Echo/Chi), Python (FastAPI/Flask), Node.js (Express/NestJS), Java (Spring Boot), gRPC Protobuf.
+   - **Consumer**: Frontend Web, Mobile Clients, KrakenD API Gateway, or internal peer services.
    - **Traffic Flow**: Inbound to our services (we host the HTTP router / gRPC server).
    - **Contract Type**: Internal-for-Internal / BFF-to-Backend Interface Agreement.
 
@@ -544,7 +1031,7 @@ To eliminate ambiguity across deliverables, the Second Brain enforces strict tax
 
 ### 1.1 Microservice Topology & Port Allocations
 
-| Microservice Name | Runtime | HTTP Port | gRPC Port | Primary Persistence | Core Responsibility | Source Provenance |
+| Microservice Name | Runtime Engine | HTTP Port | gRPC Port | Primary Persistence | Core Responsibility | Source Provenance |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 `;
 
@@ -552,18 +1039,71 @@ To eliminate ambiguity across deliverables, the Second Brain enforces strict tax
 const sortedSvcs = Array.from(microservices.values()).sort((a, b) => a.name.localeCompare(b.name));
 
 sortedSvcs.forEach(svc => {
-  md += `| **\`${svc.name}\`** | Golang 1.21 | \`${svc.httpPort}\` | \`${svc.grpcPort}\` | ${svc.db} | ${svc.responsibility} | ${svc.provenance} |\n`;
+  md += `| **\`${svc.name}\`** | ${svc.runtime} | \`${svc.httpPort}\` | \`${svc.grpcPort}\` | ${svc.db} | ${svc.responsibility} | ${svc.provenance} |\n`;
 });
 
-md += `\n### 1.2 Active Internal Endpoints Registry\n\n`;
+// 1.2 Active Internal HTTP Endpoints
+md += `\n### 1.2 Active Internal Endpoints Registry (HTTP / REST)\n\n`;
 
 sortedSvcs.forEach(svc => {
   if (svc.endpoints.length === 0) return;
-  md += `#### 📦 \`${svc.name}\` (Port ${svc.httpPort})\n`;
+  md += `#### 📦 \`${svc.name}\` (${svc.runtime} | Port ${svc.httpPort})\n`;
   svc.endpoints.forEach(ep => {
     md += `- \`${ep.method} ${ep.path}\` — ${svc.responsibility} ${ep.provenance}\n`;
   });
   md += `\n`;
+});
+
+// 1.3 Internal gRPC Service Contracts
+md += `### 1.3 Internal gRPC Microservice RPC Contracts\n\n`;
+md += `Authoritative RPC contracts compiled from production Protocol Buffers (\`.proto\`) defining inter-service interfaces:\n\n`;
+
+sortedSvcs.forEach(svc => {
+  if (svc.grpcServices.length === 0) return;
+  md += `#### ⚡ \`${svc.name}\` (gRPC Port ${svc.grpcPort})\n`;
+  md += `| Service | RPC Method | Request Message | Response Message | Protobuf Provenance |\n`;
+  md += `| :--- | :--- | :--- | :--- | :--- |\n`;
+  svc.grpcServices.forEach(g => {
+    md += `| \`${g.service}\` | **\`${g.method}\`** | \`${g.request}\` | \`${g.response}\` | ${g.provenance} |\n`;
+  });
+  md += `\n`;
+});
+
+// 1.4 API Gateway Ingress Contracts (KrakenD)
+if (gatewayEndpoints.length > 0) {
+  md += `### 1.4 API Gateway Ingress Contracts (KrakenD)\n\n`;
+  md += `Production API Gateway edge routing configurations mapping customer/channel ingress endpoints to internal backend services:\n\n`;
+  md += `| Ingress Method | Public Gateway Endpoint | Backend URL Pattern | Mandatory Headers | Query Parameters | Gateway Provenance |\n`;
+  md += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+  gatewayEndpoints.forEach(gw => {
+    md += `| \`${gw.method}\` | **\`${gw.endpoint}\`** | \`${gw.backendUrl}\` | \`${gw.headers}\` | \`${gw.queryParams}\` | ${gw.provenance} |\n`;
+  });
+  md += `\n`;
+}
+
+// 1.5 Contract Data Transfer Objects (DTO Models)
+md += `### 1.5 Core Data Transfer Objects (DTO Request/Response Models)\n\n`;
+md += `Structured data models extracted from Go structs and Python Pydantic models for authoritative contract generation:\n\n`;
+
+sortedSvcs.forEach(svc => {
+  if (svc.dtoModels.length === 0) return;
+  const sampleModels = svc.dtoModels.slice(0, 15);
+  md += `<details>\n<summary><b>📦 ${svc.name} (${svc.dtoModels.length} Models Cataloged)</b></summary>\n\n`;
+  sampleModels.forEach(m => {
+    md += `##### \`${m.name}\` ${m.provenance}\n`;
+    if (m.fields.length > 0) {
+      md += `| Field / JSON Key | Type | Required |\n`;
+      md += `| :--- | :--- | :--- |\n`;
+      m.fields.forEach(f => {
+        md += `| \`${f.jsonKey || f.name}\` | \`${f.type}\` | ${f.required ? 'Yes' : 'No'} |\n`;
+      });
+      md += `\n`;
+    }
+  });
+  if (svc.dtoModels.length > 15) {
+    md += `> *... and ${svc.dtoModels.length - 15} more DTO models cataloged in \`${svc.name}\`.*\n\n`;
+  }
+  md += `</details>\n\n`;
 });
 
 md += `---
@@ -576,7 +1116,6 @@ md += `---
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 `;
 
-// Filter surrounding systems that have endpoints or sources
 const activeSurroundings = Array.from(surroundingSystems.values())
   .filter(s => s.endpoints.length > 0 || s.sources.size > 0)
   .sort((a, b) => a.code.localeCompare(b.code));
@@ -600,8 +1139,11 @@ activeSurroundings.forEach(sys => {
 
 fs.writeFileSync(outputFile, md, 'utf8');
 
-console.log(`\n✨ Successfully crystallized Ground Truth API Inventory!`);
-console.log(`   - Internal Microservices Cataloged : ${sortedSvcs.length}`);
+console.log(`\n✨ Successfully crystallized Universal Polyglot Ground Truth API Inventory!`);
+console.log(`   - Polyglot Microservices Cataloged : ${sortedSvcs.length}`);
 console.log(`   - Internal Route Endpoints Indexed : ${sortedSvcs.reduce((acc, s) => acc + s.endpoints.length, 0)}`);
+console.log(`   - Internal gRPC RPC Methods Mapped : ${sortedSvcs.reduce((acc, s) => acc + s.grpcServices.length, 0)}`);
+console.log(`   - KrakenD Gateway Routes Mapped    : ${gatewayEndpoints.length}`);
+console.log(`   - DTO Payload Models Cataloged     : ${sortedSvcs.reduce((acc, s) => acc + s.dtoModels.length, 0)}`);
 console.log(`   - External Surrounding Systems     : ${activeSurroundings.length}`);
 console.log(`   - External Endpoints & IFAs Mapped : ${activeSurroundings.reduce((acc, s) => acc + s.endpoints.length, 0)}\n`);

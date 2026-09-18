@@ -48,7 +48,7 @@ Create or synchronize the task backlog so deliverables can be executed cleanly t
   - Enrich the catalog with lifecycle state machine transitions, Go entity mappings, and domain relationships.
   - **ANTI-CHERRY-PICKING RULE**: Every table discovered in DDL MUST be indexed in `entity-catalog.md`. The auditor (`node ./bin/audit.js`) will fail with a hard block if any table is omitted.
 - **API Inventory & Surrounding Systems Disambiguation (`01-ground-truth/api-inventory.md`)**:
-  - **Deterministic API Ingestion**: Run `node ./bin/ingest-apis.js` (or `npm run ingest:apis`) to scan configs, curl samples, and Go controllers, automatically crystallizing both Internal Microservices and External Surrounding Systems with 100% provenance citations `[SRC:...]`.
+  - **Deterministic API & gRPC Ingestion**: Run `node ./bin/ingest-apis.js` (or `npm run ingest:apis`) to scan configs, curl samples, Go controllers (resolving multi-tier router groups, root empty paths, and filtering dead comments), gRPC Protocol Buffers (`.proto`), KrakenD API Gateway ingress configs (`krakend.json`), and Go DTO models (`json:"..."`), automatically crystallizing Internal HTTP APIs, gRPC RPC Contracts, KrakenD Edge Ingress, DTO Schemas, and External Surrounding Systems with 100% provenance citations `[SRC:...]`.
   
 #### ⚖️ The IFA Disambiguation Rule (Internal APIs vs External Surrounding Systems):
 Enterprise projects frequently use the term "Interface Agreement" (IFA) for both internal microservice contracts and external integrations. You MUST strictly partition them:
