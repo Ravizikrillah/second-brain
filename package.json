@@ -1,6 +1,6 @@
 {
   "name": "@ravizikrillah/second-brain",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Universal System Analyst Second Brain for AI Agents: Ingest BRD, Figma, DB, Code, & MoM into verified PlantUML, API contracts, LLD, impact analysis, and Jira tickets with provenance and anti-gaslighting protection.",
   "keywords": [
     "agent-skills",

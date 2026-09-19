@@ -33,6 +33,37 @@ directories.forEach(dir => {
   }
 });
 
+// Ensure .gitkeep in raw input subdirectories to preserve directory structure in Git
+const rawInputSubdirs = ['brd', 'db', 'existing-code', 'figma', 'mom'];
+
+rawInputSubdirs.forEach(subdir => {
+  const gitkeepPath = path.join(targetDir, '00-raw-inputs', subdir, '.gitkeep');
+  if (!fs.existsSync(gitkeepPath)) {
+    fs.writeFileSync(gitkeepPath, '', 'utf8');
+    console.log(`  📄 Created .gitkeep: 00-raw-inputs/${subdir}/.gitkeep`);
+  }
+});
+
+// Configure .gitignore with 00-raw-inputs protection rules
+const gitignorePath = path.join(targetDir, '.gitignore');
+const gitignoreRules = `
+# Keep 00-raw-inputs and 1-level subdirectories, ignore everything else inside
+00-raw-inputs/*/*
+!00-raw-inputs/*/.gitkeep
+!00-raw-inputs/*/README.md
+`;
+
+if (!fs.existsSync(gitignorePath)) {
+  fs.writeFileSync(gitignorePath, `node_modules/\n.DS_Store/\ndist/\n*.log\n\n# Local Machine Overrides (multi-SA collaboration)\nsecond-brain.local.json\n*.local.json\n.brainrc.local*\n${gitignoreRules}`, 'utf8');
+  console.log(`  📄 Created .gitignore with 00-raw-inputs protection rules`);
+} else {
+  const currentContent = fs.readFileSync(gitignorePath, 'utf8');
+  if (!currentContent.includes('00-raw-inputs/*/*')) {
+    fs.appendFileSync(gitignorePath, gitignoreRules, 'utf8');
+    console.log(`  ⚙️ Appended 00-raw-inputs protection rules to .gitignore`);
+  }
+}
+
 // Copy CLI helper tools into target project bin/
 const binSourceDir = __dirname;
 const binTargetDir = path.join(targetDir, 'bin');
@@ -140,20 +171,40 @@ const starterFiles = [
     content: `# BRD & Requirements Input\n\nPlace raw business requirement documents, PRDs, or user story markdown files here.\n`
   },
   {
+    path: '00-raw-inputs/brd/.gitkeep',
+    content: ''
+  },
+  {
     path: '00-raw-inputs/figma/README.md',
     content: `# Figma & UI/UX Specs Input\n\nPlace screen flow summaries, UX copy text, component specs, and design token exports here.\n`
+  },
+  {
+    path: '00-raw-inputs/figma/.gitkeep',
+    content: ''
   },
   {
     path: '00-raw-inputs/db/README.md',
     content: `# Database Schemas Input\n\nPlace SQL DDL scripts (CREATE TABLE, ALTER TABLE), indexes, and seed DML data here.\n`
   },
   {
+    path: '00-raw-inputs/db/.gitkeep',
+    content: ''
+  },
+  {
     path: '00-raw-inputs/existing-code/README.md',
     content: `# Existing Code Snippets & Models\n\nYou have 3 ways to connect existing codebases to Second Brain:\n\n1. **Config File (Recommended for external git repositories)**:\n   Add external repo paths to \`second-brain.json\` without copying or committing large repos:\n   \`\`\`json\n   {\n     "sources": {\n       "code": ["../my-backend-repo", "../my-frontend-repo"],\n       "ddl": ["../my-backend-repo/migrations"]\n     }\n   }\n   \`\`\`\n\n2. **Symlink (\`ln -s\`)**:\n   Create symlinks inside this directory:\n   \`\`\`bash\n   ln -s /path/to/my-backend ./00-raw-inputs/existing-code/my-backend\n   \`\`\`\n   *(This directory is git-ignored so external repos are never committed to Second Brain git.)*\n\n3. **Physical Copy / Drop**:\n   Place backend microservice folders, Go routers, Python/TS DTOs, and YAML configs directly here.\n`
   },
   {
+    path: '00-raw-inputs/existing-code/.gitkeep',
+    content: ''
+  },
+  {
     path: '00-raw-inputs/mom/README.md',
     content: `# Meeting Minutes (MoM) & Discussion Notes\n\nPlace meeting notes, Slack/chat agreements, and alignment decisions here.\n`
+  },
+  {
+    path: '00-raw-inputs/mom/.gitkeep',
+    content: ''
   },
 
   // --- Zone 1: Ground Truth ---
@@ -242,30 +293,10 @@ const starterFiles = [
     content: `# 0001. Hierarchy of Truth and Mandatory Hard Block\n\nAI agents processing mixed requirements (MoM, BRDs, production code, chat instructions) are vulnerable to gaslighting and contradictory inputs. We enforce a strict 5-tier precedence hierarchy where production code and active DDL outrank signed BRDs, which outrank MoM notes and ad-hoc chat instructions; any contradiction triggers a mandatory Hard Block that halts deliverable generation until human arbitration records an Architectural Decision Record (ADR). This trades automated turnaround speed for uncompromised architectural integrity.\n`
   },
 
-  // --- .gitignore ---
-  {
-    path: '.gitignore',
-    content: `# Local Machine Overrides (multi-SA collaboration)
-second-brain.local.json
-*.local.json
-.brainrc.local*
-
-# Ephemeral Raw Inputs (preserve folder hierarchy with .gitkeep)
-00-raw-inputs/existing-code/*
-!00-raw-inputs/existing-code/README.md
-!00-raw-inputs/existing-code/.gitkeep
-
-# OS & Environment
-.DS_Store
-Thumbs.db
-node_modules/
-`
-  },
-
   // --- CLI Bin ---
   {
     path: 'bin/README.md',
-    content: `# ⚙️ Second Brain Deterministic CLI Tools (\`bin/\`)\n\nZero-dependency, deterministic Node.js utilities for scaffolding, schema ingestion, API extraction, and provenance auditing.\n\n---\n\n## 🛠️ Tool Catalog\n- \`init.js\` (\`npm run init\`): Scaffolds 6-zone directory hierarchy, configuration rules, templates, and READMEs.\n- \`organize.js\` (\`npm run organize [dir]\`): Directory-preserving auto-triage for raw unstructured input files.\n- \`ingest-ddl.js\` (\`npm run ingest:ddl\`): Deterministic SQL DDL parser indexing 100% of tables into \`entity-catalog.md\`.\n- \`ingest-apis.js\` (\`npm run ingest:apis\`): Deterministic API ingester separating Internal APIs from External Surrounding Systems.\n- \`ingest-brd.js\` (\`npm run ingest:brd\`): Deterministic BRD ingester extracting functional requirements & RBAC into \`business-rules.md\`.\n- \`generate-api-sequences.js\` (\`npm run deliver:apis\`): Automated 1-to-1 PlantUML sequence diagram generator for internal endpoints.\n- \`audit.js\` (\`npm run audit\`): Provenance coverage checker & contradiction detector.\n`
+    content: `# ⚙️ Second Brain Deterministic CLI Tools (\`bin/\`)\n\nZero-dependency, deterministic Node.js utilities for scaffolding, schema ingestion, API extraction, and provenance auditing.\n\n---\n\n## 🛠️ Tool Catalog\n- \`init.js\` (\`npm run init\`): Scaffolds 6-zone directory hierarchy, configuration rules, .gitkeep files, .gitignore protection rules, and baseline templates.\n- \`organize.js\` (\`npm run organize [dir]\`): Directory-preserving auto-triage for raw unstructured input files.\n- \`ingest-ddl.js\` (\`npm run ingest:ddl\`): Deterministic SQL DDL parser indexing 100% of tables into \`entity-catalog.md\`.\n- \`ingest-apis.js\` (\`npm run ingest:apis\`): Deterministic API ingester separating Internal APIs from External Surrounding Systems.\n- \`ingest-brd.js\` (\`npm run ingest:brd\`): Deterministic BRD ingester extracting functional requirements & RBAC into \`business-rules.md\`.\n- \`generate-api-sequences.js\` (\`npm run deliver:apis\`): Automated 1-to-1 PlantUML sequence diagram generator for internal endpoints.\n- \`audit.js\` (\`npm run audit\`): Provenance coverage checker & contradiction detector.\n`
   },
 
   // --- Universal Rules & Context ---

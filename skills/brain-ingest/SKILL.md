@@ -36,7 +36,7 @@ Second Brain supports connecting to external live Backend (BE) and Frontend (FE)
   ```
 - **Zero-Footprint Symlinks (`ln -s`)**:
   - `ln -s /path/to/external-repo ./00-raw-inputs/existing-code/my-repo`
-  - The folder `00-raw-inputs/existing-code/*` is git-ignored, guaranteeing zero bloat in git history.
+  - The directory `00-raw-inputs/*/*` is git-ignored (while preserving `.gitkeep` and `README.md`), guaranteeing zero bloat in git history.
 - **Portable Relative Provenance**:
   All generated provenance tags automatically strip machine-specific local directories (`/Users/...`, `C:\Users\...`), compiling into portable citations (e.g. `[SRC:CODE:backend-service/auth/controller.go#L40]`).
 - **🔄 Living Ground Truth on `git pull`**:

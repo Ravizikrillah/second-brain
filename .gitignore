@@ -7,12 +7,14 @@ dist/
 *.log
 skills-lock.json
 
-# Raw inputs: allow symlinks and local scratch repos without committing external code repos
-00-raw-inputs/existing-code/*
-!00-raw-inputs/existing-code/README.md
 
 # Local machine overrides (multi-SA collaboration)
 second-brain.local.json
 *.local.json
 .brainrc.local*
 
+
+# Keep 00-raw-inputs and 1-level subdirectories, ignore everything else inside
+00-raw-inputs/*/*
+!00-raw-inputs/*/.gitkeep
+!00-raw-inputs/*/README.md
