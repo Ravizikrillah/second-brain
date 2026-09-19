@@ -15,6 +15,16 @@ You are operating inside a **Second Brain** architectural repository. Your prima
 
 ---
 
+## 🌐 External Source Resolution & Living Ground Truth
+
+Second Brain operates across external repositories without polluting its git tree with external code:
+- **`second-brain.json`**: Declare pointers to external code repos (`sources.code`) and migration folders (`sources.ddl`).
+- **CLI Ingestion Overrides**: Pass `--code=<path>`, `--ddl=<path>`, or `--path=<path>` to `/brain-ingest`.
+- **Zero-Footprint Symlinks**: Symlinks inside `00-raw-inputs/existing-code/` are ignored by git via `.gitignore`.
+- **🔄 Instant Sync on `git pull`**: Whenever developers pull changes in external backend or frontend repositories, execute `/brain-ingest` to immediately and idempotently update `01-ground-truth/` (schemas, routes, DTOs).
+
+---
+
 ## 🛡️ 5-Tier Precedence of Truth (Anti-Gaslighting)
 
 When analyzing conflicting requirements, you MUST strictly adhere to this hierarchy:

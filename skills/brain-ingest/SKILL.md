@@ -12,19 +12,39 @@ Scan all raw inputs across the repository, establish an exhaustive **Delivery Pl
 
 ## 📋 Execution Protocol
 
-### 0. 🧹 Pre-Flight Auto-Triage & File Organization
+### 0. 🌐 Universal Source Resolution (External Repos & Living Ground Truth)
+Second Brain supports connecting to external live Backend (BE) and Frontend (FE) repositories **without copying or committing external git repositories** into this workspace:
+- **Declarative (`second-brain.json` / `.brainrc.json`)**:
+  ```json
+  {
+    "sources": {
+      "code": ["../backend-service", "../frontend-app", "./00-raw-inputs/existing-code"],
+      "ddl": ["../backend-service/migrations", "./00-raw-inputs/db"]
+    }
+  }
+  ```
+- **CLI Flags**: Pass `--code=<path>`, `--ddl=<path>`, or `--path=<path>`:
+  - `node ./bin/ingest-apis.js --code=../backend-repo`
+  - `node ./bin/ingest-ddl.js --ddl=../backend-repo/migrations`
+- **Zero-Footprint Symlinks (`ln -s`)**:
+  - `ln -s /path/to/external-repo ./00-raw-inputs/existing-code/my-repo`
+  - The folder `00-raw-inputs/existing-code/*` is git-ignored, guaranteeing zero bloat in git history.
+- **🔄 Living Ground Truth on `git pull`**:
+  Whenever the external codebase is updated (`git pull origin main` in the external repo), simply rerun `/brain-ingest` (or `npm run ingest:apis` / `npm run ingest:ddl`). Second Brain immediately rescans the live source code and synchronizes Ground Truth (`api-inventory.md`, `entity-catalog.md`) idempotently.
+
+### 1. 🧹 Pre-Flight Auto-Triage & File Organization
 If raw materials are located in an unstructured folder (e.g., `artifacts/`, `vault/`, `docs/`) or if an argument is passed (`/brain-ingest artifacts/`):
 - Run `node ./bin/organize.js [source_folder]` (or `npm run organize [source_folder]`).
 - This automatically sorts files into the correct `00-raw-inputs/` subdirectories (`db/`, `brd/`, `existing-code/`, `mom/`, `figma/`) while skipping videos and heavy binary archives.
 
-### 1. 🔍 Exhaustive Raw Input Discovery & Inventory
-Recursively scan all files in `00-raw-inputs/`:
-- **Database (`00-raw-inputs/db/`)**: Detect all SQL DDL files and count EVERY `CREATE TABLE` / entity. Do NOT skip any table.
-- **Product BRDs (`00-raw-inputs/brd/`)**: Identify all requirement docs, journey flows, and features.
-- **Service Configurations & Code (`00-raw-inputs/existing-code/`)**: Scan YAML configs, routes, handlers, and models.
-- **Figma & MoM (`00-raw-inputs/figma/`, `00-raw-inputs/mom/`)**: Scan UI notes and discussion minutes.
+### 2. 🔍 Exhaustive Raw Input Discovery & Inventory
+Recursively scan all resolved source directories (via `source-resolver.js`):
+- **Database (`ddl` sources)**: Detect all SQL DDL files and count EVERY `CREATE TABLE` / entity across all configured migration folders. Do NOT skip any table.
+- **Product BRDs (`brd` sources)**: Identify all requirement docs, journey flows, and features.
+- **Service Configurations & Code (`code` sources)**: Scan Polyglot codebases (Go, Python FastAPI, TS/Node.js, Java Spring Boot, gRPC Protobuf, OpenAPI, KrakenD gateway) across all external & local repos.
+- **Figma & MoM (`figma/`, `mom/`)**: Scan UI notes and discussion minutes.
 
-### 2. 🗺️ Generate / Update Delivery Plan (`02-provenance/delivery-plan.md`)
+### 3. 🗺️ Generate / Update Delivery Plan (`02-provenance/delivery-plan.md`)
 Create or synchronize the task backlog so deliverables can be executed cleanly task-by-task without token limits:
 ```markdown
 # 🗺️ Second Brain Delivery & Ingestion Plan
@@ -41,7 +61,7 @@ Create or synchronize the task backlog so deliverables can be executed cleanly t
 **Status**: [X]% Ingested | [Y]% Delivered
 ```
 
-### 3. 🏛️ Crystallize Ground Truth (`01-ground-truth/`)
+### 4. 🏛️ Crystallize Ground Truth (`01-ground-truth/`)
 - **Domain Glossary (`01-ground-truth/domain-glossary.md`)**: Update ubiquitous business terminology, canonical definitions, and forbidden synonyms.
 - **Entity Catalog (`01-ground-truth/entity-catalog.md`)**:
   - **Deterministic DDL Ingestion**: Run `node ./bin/ingest-ddl.js` (or `npm run ingest:ddl`) to parse 100% of tables and columns directly from SQL files into `entity-catalog.md`. This guarantees zero dropped tables or columns.
@@ -53,17 +73,17 @@ Create or synchronize the task backlog so deliverables can be executed cleanly t
 #### ⚖️ The IFA Disambiguation Rule (Internal APIs vs External Surrounding Systems):
 Enterprise projects frequently use the term "Interface Agreement" (IFA) for both internal microservice contracts and external integrations. You MUST strictly partition them:
 1. **🔌 Part 1: Internal Microservice APIs (Owned / Inbound)**:
-   - **Provider**: Microservices implemented inside this repository (`repo/backend/fmc-*`).
+   - **Provider**: Microservices implemented inside this repository (`repo/backend/*` or configured external codebases).
    - **Consumer**: Frontend Web, BFF, KrakenD API Gateway, Mobile App, or internal peer services.
-   - **Origin**: Go HTTP router handlers (`internal/controller/http/v1/...`) and gRPC servers.
+   - **Origin**: Go HTTP router handlers (`internal/controller/http/...`), FastAPI/Express/Spring Boot routes, and gRPC servers.
    - **Traffic Flow**: Inbound to our services (we host and maintain the endpoints).
 2. **🌐 Part 2: External Surrounding Systems (Outbound Consumed / Inbound Webhooks)**:
-   - **Provider**: External Enterprise Core systems or vendors (Central Order / SOM, ESB, UPP Payment, DSC, DigiPOS, Siebel CRM, Docman Vault, Dukcapil, ISYANA OCR, Orbit, Google Maps).
+   - **Provider**: External Enterprise Core systems or vendors.
    - **Consumer**: Our internal microservices act as **Clients** calling outbound endpoints, OR our services expose callback listeners for asynchronous incoming webhooks.
-   - **Origin**: Microservice YAML configs (`web_api:`, `api_key_surrounding:`), curl samples (`configurations/curl-surroundings/`), and BRD IFA PDFs.
+   - **Origin**: Microservice YAML configs (`web_api:`), curl samples, and BRD IFA documents.
    - **STRICT PROHIBITION**: NEVER catalog external surrounding systems as internal microservices, and NEVER put external endpoints into internal service lists!
 
-### 4. 🛡️ Enforce 5-Tier Precedence of Truth
+### 5. 🛡️ Enforce 5-Tier Precedence of Truth
 - Tier 1: Production Code & Active DB DDL
 - Tier 2: Signed BRD / Approved PRD
 - Tier 3: Accepted ADRs (`05-adrs/`)
@@ -76,7 +96,7 @@ If a Tier 4 (MoM) or Tier 5 (Chat) input contradicts Tier 1, 2, or 3:
 2. **LOG**: Append the conflict to `02-provenance/contradictions.md`.
 3. **ARBITRATE**: Prompt the operator to arbitrate via an ADR in `05-adrs/`.
 
-### 5. 🏷️ Update Traceability & Output Scorecard
+### 6. 🏷️ Update Traceability & Output Scorecard
 - Update `02-provenance/traceability-matrix.md` with source citations `[SRC:...]`.
 - Display an Ingestion Summary Scorecard:
   - Total Raw Files Scanned

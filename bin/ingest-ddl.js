@@ -2,31 +2,70 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveSources, findFiles } = require('./source-resolver');
 
 const targetDir = process.cwd();
-const dbDir = path.join(targetDir, '00-raw-inputs', 'db');
 const catalogFile = path.join(targetDir, '01-ground-truth', 'entity-catalog.md');
 
-console.log(`\n🗄️  Second Brain Deterministic DDL Schema Ingester\n`);
+console.log(`\n🗄️  Second Brain Deterministic DDL Schema Ingester (Universal Source Resolver)\n`);
 
-if (!fs.existsSync(dbDir)) {
-  console.log(`⚠️  No db directory found at 00-raw-inputs/db/. Nothing to ingest.`);
+const ddlResolution = resolveSources('ddl', { targetDir });
+const validSources = ddlResolution.sources.filter(s => s.exists);
+
+if (validSources.length === 0) {
+  console.log(`⚠️  No DDL sources found.`);
+  console.log(`   Checked locations:`);
+  ddlResolution.sources.forEach(s => console.log(`   - ${s.path} (${s.origin}) [NOT FOUND]`));
+  console.log(`\n💡 Tip: Provide SQL files in 00-raw-inputs/db/, specify CLI flag '--ddl <path>', or add to 'second-brain.json':`);
+  console.log(`   {\n     "sources": {\n       "ddl": ["../backend-repo/migrations", "00-raw-inputs/db"]\n     }\n   }\n`);
   process.exit(0);
 }
 
-const sqlFiles = fs.readdirSync(dbDir).filter(f => f.endsWith('.sql'));
-if (sqlFiles.length === 0) {
-  console.log(`⚠️  No .sql files found in 00-raw-inputs/db/. Place your DDL scripts there.`);
+if (ddlResolution.configPath) {
+  console.log(`⚙️  Loaded configuration from: ${path.relative(targetDir, ddlResolution.configPath) || ddlResolution.configPath}`);
+}
+
+console.log(`📁 Resolved DDL Source Directories:`);
+validSources.forEach(s => {
+  const badge = s.isExternal ? '🌐 External Repo' : '📁 Local Dir';
+  console.log(`   • [${s.origin}] ${s.path} (${badge})`);
+});
+console.log('');
+
+// Discover SQL files across all valid source directories
+const discoveredFiles = [];
+validSources.forEach(source => {
+  if (source.isDirectory) {
+    const sqls = findFiles(source.path, file => file.endsWith('.sql'));
+    sqls.forEach(absFile => {
+      discoveredFiles.push({
+        absPath: absFile,
+        sourceName: source.name,
+        relToTarget: path.relative(targetDir, absFile),
+        relToSource: path.relative(source.path, absFile)
+      });
+    });
+  } else if (source.path.endsWith('.sql')) {
+    discoveredFiles.push({
+      absPath: source.path,
+      sourceName: source.name,
+      relToTarget: path.relative(targetDir, source.path),
+      relToSource: path.basename(source.path)
+    });
+  }
+});
+
+if (discoveredFiles.length === 0) {
+  console.log(`⚠️  No .sql files found across ${validSources.length} source directory(ies).`);
   process.exit(0);
 }
 
-console.log(`🔍 Scanning ${sqlFiles.length} SQL file(s) in 00-raw-inputs/db/:\n`);
+console.log(`🔍 Scanning ${discoveredFiles.length} SQL file(s):\n`);
 
 const tables = [];
 
-sqlFiles.forEach(file => {
-  const filePath = path.join(dbDir, file);
-  const content = fs.readFileSync(filePath, 'utf8');
+discoveredFiles.forEach(fileEntry => {
+  const content = fs.readFileSync(fileEntry.absPath, 'utf8');
   const lines = content.split(/\r?\n/);
 
   let currentTable = null;
@@ -40,7 +79,7 @@ sqlFiles.forEach(file => {
     if (createMatch) {
       currentTable = {
         name: createMatch[1],
-        file: file,
+        file: fileEntry.relToTarget,
         startLine: lineNum,
         primaryKey: null,
         columns: []
@@ -105,12 +144,6 @@ tables.forEach(t => {
   console.log(`  - \`${t.name}\`: ${t.columns.length} columns (PK: ${t.primaryKey || 'None'}) [${t.file}#L${t.startLine}]`);
 });
 
-// Read existing entity-catalog.md if present to preserve custom annotations
-let existingCatalog = '';
-if (fs.existsSync(catalogFile)) {
-  existingCatalog = fs.readFileSync(catalogFile, 'utf8');
-}
-
 // Generate structured catalog
 let output = `# Entity Catalog: System Ground Truth
 
@@ -121,15 +154,6 @@ let output = `# Entity Catalog: System Ground Truth
 ---
 
 `;
-
-// Track existing documented tables to avoid wiping custom state machine sections
-const documentedTables = new Set();
-if (existingCatalog) {
-  const tableHeaderMatches = existingCatalog.matchAll(/^##\s+(?:\d+\.\s+)?(?:Entity:\s*)?`?([a-zA-Z0-9_]+)`?/gmi);
-  for (const m of tableHeaderMatches) {
-    documentedTables.add(m[1].toLowerCase());
-  }
-}
 
 // Build table sections
 tables.forEach((table, idx) => {

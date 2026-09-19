@@ -6,3 +6,7 @@ agent/
 dist/
 *.log
 skills-lock.json
+
+# Raw inputs: allow symlinks and local scratch repos without committing external code repos
+00-raw-inputs/existing-code/*
+!00-raw-inputs/existing-code/README.md

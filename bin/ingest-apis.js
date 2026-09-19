@@ -16,17 +16,66 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveSources, findFiles: resolveFindFiles } = require('./source-resolver');
 
 const targetDir = process.cwd();
-const existingCodeDir = path.join(targetDir, '00-raw-inputs', 'existing-code');
-const brdDir = path.join(targetDir, '00-raw-inputs', 'brd');
+const codeResolution = resolveSources('code', { targetDir });
+const brdResolution = resolveSources('brd', { targetDir });
 const outputFile = path.join(targetDir, '01-ground-truth', 'api-inventory.md');
 
-console.log(`\n🔌 Second Brain Universal Polyglot API & Surrounding System Ingester (v1.5.0)\n`);
+console.log(`\n🔌 Second Brain Universal Polyglot API & Surrounding System Ingester (Universal Source Resolver)\n`);
 
-if (!fs.existsSync(existingCodeDir) && !fs.existsSync(brdDir)) {
-  console.log(`⚠️  No raw inputs found in 00-raw-inputs/existing-code/ or 00-raw-inputs/brd/. Nothing to ingest.`);
+const validCodeSources = codeResolution.sources.filter(s => s.exists);
+const validBrdSources = brdResolution.sources.filter(s => s.exists);
+
+if (codeResolution.configPath) {
+  console.log(`⚙️  Loaded configuration from: ${path.relative(targetDir, codeResolution.configPath) || codeResolution.configPath}`);
+}
+
+console.log(`📁 Resolved Code Source Directories:`);
+if (validCodeSources.length === 0) {
+  console.log(`   (None found)`);
+} else {
+  validCodeSources.forEach(s => {
+    const badge = s.isExternal ? '🌐 External Repo' : '📁 Local Dir';
+    console.log(`   • [${s.origin}] ${s.path} (${badge})`);
+  });
+}
+
+console.log(`📁 Resolved BRD Source Directories:`);
+if (validBrdSources.length === 0) {
+  console.log(`   (None found)`);
+} else {
+  validBrdSources.forEach(s => {
+    const badge = s.isExternal ? '🌐 External Path' : '📁 Local Dir';
+    console.log(`   • [${s.origin}] ${s.path} (${badge})`);
+  });
+}
+console.log('');
+
+if (validCodeSources.length === 0 && validBrdSources.length === 0) {
+  console.log(`⚠️  No raw inputs found in code or BRD sources.`);
+  console.log(`\n💡 Tip: Point to external repositories via CLI flags or 'second-brain.json':`);
+  console.log(`   CLI: node ./bin/ingest-apis.js --code=../my-backend-repo`);
+  console.log(`   Config file (second-brain.json):`);
+  console.log(`   {\n     "sources": {\n       "code": ["../backend-service", "../frontend-app"],\n       "ddl": ["../backend-service/migrations"]\n     }\n   }\n`);
   process.exit(0);
+}
+
+function scanAllCodeSources(filterFn, options = {}) {
+  let all = [];
+  validCodeSources.forEach(src => {
+    all = all.concat(resolveFindFiles(src.path, filterFn, options));
+  });
+  return all;
+}
+
+function scanAllBrdSources(filterFn, options = {}) {
+  let all = [];
+  validBrdSources.forEach(src => {
+    all = all.concat(resolveFindFiles(src.path, filterFn, options));
+  });
+  return all;
 }
 
 // Known Surrounding System Metadata Registry
@@ -145,23 +194,9 @@ const SURROUNDING_METADATA = {
   }
 };
 
-// Helper: Recursively find files
-function findFiles(dir, filterFn) {
-  let results = [];
-  if (!fs.existsSync(dir)) return results;
-  const list = fs.readdirSync(dir);
-  list.forEach(file => {
-    const fullPath = path.join(dir, file);
-    try {
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        results = results.concat(findFiles(fullPath, filterFn));
-      } else if (!filterFn || filterFn(file, fullPath)) {
-        results.push(fullPath);
-      }
-    } catch (e) {}
-  });
-  return results;
+// Helper: Recursively find files (uses high-performance source-resolver findFiles)
+function findFiles(dir, filterFn, options = {}) {
+  return resolveFindFiles(dir, filterFn, options);
 }
 
 function cleanPath(p) {
@@ -213,7 +248,7 @@ function detectRuntime(dirPath) {
 // 1. INGEST CONFIGS & DISCOVER MICROSERVICES
 // -------------------------------------------------------------
 const microservices = new Map();
-const allYamls = findFiles(existingCodeDir, (file) => file.endsWith('.yml') || file.endsWith('.yaml'));
+const allYamls = scanAllCodeSources((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
 const configFiles = allYamls.filter(isServiceConfigFile);
 
 console.log(`🔍 Discovered ${configFiles.length} service configuration file(s).`);
@@ -224,12 +259,17 @@ configFiles.forEach(cfgPath => {
   const baseName = path.basename(cfgPath);
 
   // Extract service name
-  let svcName = baseName.replace(/^config-/, 'fmc-').replace(/\.ya?ml$/, '');
-  if (svcName === 'config') {
-    const parts = relPath.split(path.sep);
-    const backendIdx = parts.indexOf('backend') !== -1 ? parts.indexOf('backend') : parts.indexOf('services');
-    if (backendIdx !== -1 && parts[backendIdx + 1]) {
-      svcName = parts[backendIdx + 1];
+  let svcName = baseName.replace(/^config-/, '').replace(/\.ya?ml$/, '');
+  if (svcName === 'config' || svcName === 'application' || svcName === 'app') {
+    const parentDirName = path.basename(path.dirname(cfgPath));
+    if (parentDirName && parentDirName !== '.' && parentDirName !== 'config' && parentDirName !== 'configs') {
+      svcName = parentDirName;
+    } else {
+      const parts = relPath.split(path.sep);
+      const backendIdx = parts.indexOf('backend') !== -1 ? parts.indexOf('backend') : parts.indexOf('services');
+      if (backendIdx !== -1 && parts[backendIdx + 1]) {
+        svcName = parts[backendIdx + 1];
+      }
     }
   }
   
@@ -262,10 +302,6 @@ configFiles.forEach(cfgPath => {
   else if (svcName.includes('smart-selfcare')) responsibility = 'Self-care diagnostic hub, subscriber profile, router reboot';
   else if (svcName.includes('tracking')) responsibility = 'Real-time order tracker, technician dispatch status, timeline';
 
-  if (!svcName.startsWith('fmc-') && svcName !== 'krakend') {
-    svcName = `fmc-${svcName}`;
-  }
-
   if (!microservices.has(svcName) || microservices.get(svcName).httpPort === '—') {
     microservices.set(svcName, {
       name: svcName,
@@ -282,35 +318,50 @@ configFiles.forEach(cfgPath => {
   }
 });
 
-// Scan all potential microservice root directories (repo/backend, repo/ai, repo/services, services/, apps/)
-const serviceRootDirs = [
-  path.join(existingCodeDir, 'repo', 'backend'),
-  path.join(existingCodeDir, 'repo', 'ai'),
-  path.join(existingCodeDir, 'repo', 'services'),
-  path.join(existingCodeDir, 'repo', 'apps'),
-  path.join(existingCodeDir, 'services'),
-  path.join(existingCodeDir, 'backend'),
-  path.join(existingCodeDir, 'apps')
-];
+// Scan all potential microservice root directories across all valid code sources
+const serviceRootDirs = [];
+validCodeSources.forEach(src => {
+  serviceRootDirs.push(src.path);
+  ['repo/backend', 'repo/ai', 'repo/services', 'repo/apps', 'services', 'backend', 'apps', 'packages', 'modules'].forEach(sub => {
+    const subPath = path.join(src.path, sub);
+    if (fs.existsSync(subPath)) {
+      serviceRootDirs.push(subPath);
+    }
+  });
+});
 
 serviceRootDirs.forEach(rootDir => {
   if (!fs.existsSync(rootDir)) return;
-  const dirs = fs.readdirSync(rootDir).filter(d => {
-    try {
-      return fs.statSync(path.join(rootDir, d)).isDirectory();
-    } catch (e) {
-      return false;
-    }
-  });
 
-  dirs.forEach(d => {
-    if (d === 'salt-pkg' || d === 'common' || d === 'pkg' || d === '.git' || d === 'node_modules') return;
-    const fullDirPath = path.join(rootDir, d);
+  const candidateDirs = [];
+  const isDirectService = fs.existsSync(path.join(rootDir, 'go.mod')) ||
+                          fs.existsSync(path.join(rootDir, 'requirements.txt')) ||
+                          fs.existsSync(path.join(rootDir, 'pyproject.toml')) ||
+                          fs.existsSync(path.join(rootDir, 'pom.xml')) ||
+                          (fs.existsSync(path.join(rootDir, 'package.json')) && !fs.existsSync(path.join(rootDir, 'pnpm-workspace.yaml')));
+
+  if (isDirectService) {
+    candidateDirs.push({ name: path.basename(rootDir), fullDirPath: rootDir });
+  }
+
+  try {
+    const subDirs = fs.readdirSync(rootDir).filter(d => {
+      if (d === 'salt-pkg' || d === 'common' || d === 'pkg' || d === '.git' || d === 'node_modules' || d === 'vendor') return false;
+      try {
+        return fs.statSync(path.join(rootDir, d)).isDirectory();
+      } catch (e) {
+        return false;
+      }
+    });
+    subDirs.forEach(d => candidateDirs.push({ name: d, fullDirPath: path.join(rootDir, d) }));
+  } catch (e) {}
+
+  candidateDirs.forEach(({ name: d, fullDirPath }) => {
     const runtime = detectRuntime(fullDirPath);
 
     if (!microservices.has(d)) {
       let resp = 'Polyglot microservice component';
-      if (d.includes('krakend') || d.includes('api-middleware')) resp = 'API Gateway routing, rate-limiting, and request transformation';
+      if (d.includes('krakend') || d.includes('gateway') || d.includes('middleware')) resp = 'API Gateway routing, rate-limiting, and request transformation';
       else if (d.includes('worker') || d.includes('ops')) resp = 'Background asynchronous jobs, status sync, order escalation';
       else if (d.includes('dashboard')) resp = 'Dashboard metrics, event aggregation, and observability';
       else if (d.includes('approval')) resp = 'Berita Acara installation approvals and technician sign-off';
@@ -320,7 +371,7 @@ serviceRootDirs.forEach(rootDir => {
       else if (d.includes('teams-bot') || d.includes('telegram-bot')) resp = 'Enterprise conversational bot gateway & messaging handler';
 
       let port = '—';
-      if (d.includes('krakend') || d.includes('middleware')) port = 'Gateway';
+      if (d.includes('krakend') || d.includes('gateway')) port = 'Gateway';
       else if (d.includes('worker')) port = 'Worker';
       else if (d.includes('rag-cms')) port = '8811';
       else if (d.includes('ai-log')) port = '8000';
@@ -339,14 +390,13 @@ serviceRootDirs.forEach(rootDir => {
         dtoModels: []
       });
     } else {
-      // Update runtime dynamically
       const existing = microservices.get(d);
       existing.runtime = runtime;
     }
   });
 });
 
-console.log(`📦 Discovered ${microservices.size} microservice module(s) across backend & AI directories.`);
+console.log(`📦 Discovered ${microservices.size} microservice module(s) across code sources.`);
 
 // -------------------------------------------------------------
 // 2. PARSE INTERNAL APIS: Polyglot Routing & Schemas
@@ -354,17 +404,21 @@ console.log(`📦 Discovered ${microservices.size} microservice module(s) across
 console.log(`🔍 Scanning Polyglot API route definitions (Go, Python, TypeScript, Java, OpenAPI)...`);
 
 // Helper to find which microservice owns a given file
-function getOwningService(relPath) {
+function getOwningService(relOrFullPath) {
+  const norm = relOrFullPath.replace(/\\/g, '/');
   for (const svcName of microservices.keys()) {
-    if (relPath.includes(`/${svcName}/`) || relPath.includes(`/${svcName.replace(/^fmc-/, '')}/`)) {
+    if (norm.includes(`/${svcName}/`) || norm.endsWith(`/${svcName}`) || norm.includes(`/${svcName.replace(/^fmc-/, '')}/`)) {
       return svcName;
     }
+  }
+  if (microservices.size === 1) {
+    return Array.from(microservices.keys())[0];
   }
   return null;
 }
 
 // 2a. GOLANG ROUTE & DTO PARSER
-const goFiles = findFiles(existingCodeDir, (file, fullPath) => {
+const goFiles = scanAllCodeSources((file, fullPath) => {
   if (!file.endsWith('.go')) return false;
   if (file.endsWith('_test.go') || file.includes('_test_')) return false;
   if (fullPath.includes('/vendor/') || fullPath.includes('/examples/') || fullPath.includes('/mocks/') || fullPath.includes('/mock/')) return false;
@@ -524,7 +578,7 @@ for (const [svcName, files] of goFilesBySvc.entries()) {
 }
 
 // 2b. PYTHON ROUTE & PYDANTIC MODEL PARSER (FastAPI, Flask, Starlette)
-const pyFiles = findFiles(existingCodeDir, (file, fullPath) => {
+const pyFiles = scanAllCodeSources((file, fullPath) => {
   if (!file.endsWith('.py')) return false;
   if (file.endsWith('_test.py') || file.startsWith('test_')) return false;
   if (fullPath.includes('/venv/') || fullPath.includes('/.venv/') || fullPath.includes('/tests/')) return false;
@@ -627,7 +681,7 @@ for (const [svcName, files] of pyFilesBySvc.entries()) {
 }
 
 // 2c. NODE.JS & TYPESCRIPT ROUTE PARSER (Express, Fastify, NestJS)
-const tsFiles = findFiles(existingCodeDir, (file, fullPath) => {
+const tsFiles = scanAllCodeSources((file, fullPath) => {
   if (!file.endsWith('.ts') && !file.endsWith('.js')) return false;
   if (file.endsWith('.spec.ts') || file.endsWith('.test.ts') || file.endsWith('.test.js')) return false;
   if (fullPath.includes('/node_modules/') || fullPath.includes('/dist/') || fullPath.includes('/build/')) return false;
@@ -688,7 +742,7 @@ tsFiles.forEach(f => {
 });
 
 // 2d. JAVA / KOTLIN (Spring Boot) PARSER
-const javaFiles = findFiles(existingCodeDir, (file, fullPath) => {
+const javaFiles = scanAllCodeSources((file, fullPath) => {
   if (!file.endsWith('.java') && !file.endsWith('.kt')) return false;
   if (fullPath.includes('/test/') || fullPath.includes('/target/')) return false;
   return true;
@@ -727,7 +781,7 @@ javaFiles.forEach(f => {
 });
 
 // 2e. OPENAPI / SWAGGER SPECS (Language-Agnostic)
-const openApiFiles = findFiles(existingCodeDir, (file) => /swagger.*\.json$|openapi.*\.(json|ya?ml)$/i.test(file));
+const openApiFiles = scanAllCodeSources((file) => /swagger.*\.json$|openapi.*\.(json|ya?ml)$/i.test(file));
 openApiFiles.forEach(f => {
   const relPath = path.relative(targetDir, f);
   const svc = getOwningService(relPath);
@@ -760,7 +814,7 @@ openApiFiles.forEach(f => {
 // -------------------------------------------------------------
 console.log(`🔍 Scanning gRPC Protobuf (.proto) service definitions...`);
 
-const protoFiles = findFiles(existingCodeDir, (file) => file.endsWith('.proto'));
+const protoFiles = scanAllCodeSources((file) => file.endsWith('.proto'));
 
 protoFiles.forEach(p => {
   const content = fs.readFileSync(p, 'utf8');
@@ -816,7 +870,7 @@ protoFiles.forEach(p => {
 // -------------------------------------------------------------
 console.log(`🔍 Scanning KrakenD API Gateway routing configurations...`);
 
-const krakendFiles = findFiles(existingCodeDir, (file) => file.includes('krakend') && file.endsWith('.json'));
+const krakendFiles = scanAllCodeSources((file) => file.includes('krakend') && file.endsWith('.json'));
 const gatewayEndpoints = [];
 
 krakendFiles.forEach(kf => {
@@ -862,60 +916,77 @@ for (const [key, meta] of Object.entries(SURROUNDING_METADATA)) {
 }
 
 // 5a. Ingest curl files from configurations/curl-surroundings/
-const curlDir = path.join(existingCodeDir, 'configurations', 'curl-surroundings');
-if (fs.existsSync(curlDir)) {
-  const sysDirs = fs.readdirSync(curlDir).filter(d => fs.statSync(path.join(curlDir, d)).isDirectory());
-  sysDirs.forEach(sysKey => {
-    const sysPath = path.join(curlDir, sysKey);
-    const files = fs.readdirSync(sysPath).filter(f => f.endsWith('.txt'));
-
-    let sys = surroundingSystems.get(sysKey.toLowerCase());
-    if (!sys) {
-      sys = {
-        code: sysKey.toUpperCase(),
-        name: `${sysKey.toUpperCase()} Integration`,
-        role: `External enterprise integration for ${sysKey}`,
-        direction: 'Outbound Client Call',
-        protocol: 'REST HTTPS',
-        ownership: 'External Enterprise Core',
-        endpoints: [],
-        sources: new Set()
-      };
-      surroundingSystems.set(sysKey.toLowerCase(), sys);
-    }
-
-    files.forEach(f => {
-      const fPath = path.join(sysPath, f);
-      const content = fs.readFileSync(fPath, 'utf8');
-      const relPath = path.relative(targetDir, fPath);
-      sys.sources.add(`[SRC:CODE:${relPath}]`);
-
-      const methodMatch = content.match(/--request\s+([A-Z]+)/i) || content.match(/-X\s+([A-Z]+)/i) || ['GET', 'GET'];
-      const method = (methodMatch[1] || 'GET').toUpperCase();
-
-      const urlMatch = content.match(/'(https?:\/\/[^']+)'/) || content.match(/"(https?:\/\/[^"]+)"/) || content.match(/(https?:\/\/[^\s]+)/);
-      let url = urlMatch ? urlMatch[1] : '';
-      let endpointPath = url;
-      try {
-        if (url.startsWith('http')) {
-          const parsed = new URL(url);
-          endpointPath = parsed.pathname;
-        }
-      } catch (e) {}
-
-      const title = f.replace(/\.txt$/, '').replace(/^(?:post|get|put|delete)-api-/, '').replace(/-/g, ' ');
-
-      if (!sys.endpoints.some(e => e.path === endpointPath && e.method === method)) {
-        sys.endpoints.push({
-          method,
-          path: endpointPath,
-          title: title.charAt(0).toUpperCase() + title.slice(1),
-          provenance: `[SRC:CODE:${relPath}]`
-        });
-      }
-    });
+const curlDirs = [];
+validCodeSources.forEach(src => {
+  const candidates = [
+    path.join(src.path, 'configurations', 'curl-surroundings'),
+    path.join(src.path, 'curl-surroundings'),
+    path.join(src.path, 'curls')
+  ];
+  candidates.forEach(c => {
+    if (fs.existsSync(c) && !curlDirs.includes(c)) curlDirs.push(c);
   });
-}
+});
+const localCurl = path.join(targetDir, '00-raw-inputs', 'existing-code', 'configurations', 'curl-surroundings');
+if (fs.existsSync(localCurl) && !curlDirs.includes(localCurl)) curlDirs.push(localCurl);
+
+curlDirs.forEach(curlDir => {
+  try {
+    const sysDirs = fs.readdirSync(curlDir).filter(d => {
+      try { return fs.statSync(path.join(curlDir, d)).isDirectory(); } catch (e) { return false; }
+    });
+    sysDirs.forEach(sysKey => {
+      const sysPath = path.join(curlDir, sysKey);
+      const files = fs.readdirSync(sysPath).filter(f => f.endsWith('.txt'));
+
+      let sys = surroundingSystems.get(sysKey.toLowerCase());
+      if (!sys) {
+        sys = {
+          code: sysKey.toUpperCase(),
+          name: `${sysKey.toUpperCase()} Integration`,
+          role: `External enterprise integration for ${sysKey}`,
+          direction: 'Outbound Client Call',
+          protocol: 'REST HTTPS',
+          ownership: 'External Enterprise Core',
+          endpoints: [],
+          sources: new Set()
+        };
+        surroundingSystems.set(sysKey.toLowerCase(), sys);
+      }
+
+      files.forEach(f => {
+        const fPath = path.join(sysPath, f);
+        const content = fs.readFileSync(fPath, 'utf8');
+        const relPath = path.relative(targetDir, fPath);
+        sys.sources.add(`[SRC:CODE:${relPath}]`);
+
+        const methodMatch = content.match(/--request\s+([A-Z]+)/i) || content.match(/-X\s+([A-Z]+)/i) || ['GET', 'GET'];
+        const method = (methodMatch[1] || 'GET').toUpperCase();
+
+        const urlMatch = content.match(/'(https?:\/\/[^']+)'/) || content.match(/"(https?:\/\/[^"]+)"/) || content.match(/(https?:\/\/[^\s]+)/);
+        let url = urlMatch ? urlMatch[1] : '';
+        let endpointPath = url;
+        try {
+          if (url.startsWith('http')) {
+            const parsed = new URL(url);
+            endpointPath = parsed.pathname;
+          }
+        } catch (e) {}
+
+        const title = f.replace(/\.txt$/, '').replace(/^(?:post|get|put|delete)-api-/, '').replace(/-/g, ' ');
+
+        if (!sys.endpoints.some(e => e.path === endpointPath && e.method === method)) {
+          sys.endpoints.push({
+            method,
+            path: endpointPath,
+            title: title.charAt(0).toUpperCase() + title.slice(1),
+            provenance: `[SRC:CODE:${relPath}]`
+          });
+        }
+      });
+    });
+  } catch (e) {}
+});
 
 // 5b. Ingest external endpoints from YAML configs (web_api)
 configFiles.forEach(cfgPath => {
@@ -977,24 +1048,24 @@ configFiles.forEach(cfgPath => {
   });
 });
 
-// 5c. Scan BRD Interface Agreement PDFs
-if (fs.existsSync(brdDir)) {
-  const brdFiles = fs.readdirSync(brdDir).filter(f => /interface-agreement|blueprint|specification/i.test(f));
-  brdFiles.forEach(f => {
-    const lower = f.toLowerCase();
-    let targetSys = null;
-    if (lower.includes('customer-order') || lower.includes('cust-order')) targetSys = 'co';
-    else if (lower.includes('dsc')) targetSys = 'dsc';
-    else if (lower.includes('isyana')) targetSys = 'isyana';
-    else if (lower.includes('orbit')) targetSys = 'orbit';
-    else if (lower.includes('digipos')) targetSys = 'digipos';
-    else if (lower.includes('appointment') || lower.includes('wfm')) targetSys = 'co';
+// 5c. Scan BRD Interface Agreement files
+const brdFiles = scanAllBrdSources(f => /interface-agreement|blueprint|specification/i.test(f));
+brdFiles.forEach(fPath => {
+  const f = path.basename(fPath);
+  const lower = f.toLowerCase();
+  let targetSys = null;
+  if (lower.includes('customer-order') || lower.includes('cust-order')) targetSys = 'co';
+  else if (lower.includes('dsc')) targetSys = 'dsc';
+  else if (lower.includes('isyana')) targetSys = 'isyana';
+  else if (lower.includes('orbit')) targetSys = 'orbit';
+  else if (lower.includes('digipos')) targetSys = 'digipos';
+  else if (lower.includes('appointment') || lower.includes('wfm')) targetSys = 'co';
 
-    if (targetSys && surroundingSystems.has(targetSys)) {
-      surroundingSystems.get(targetSys).sources.add(`[SRC:BRD:${f}]`);
-    }
-  });
-}
+  if (targetSys && surroundingSystems.has(targetSys)) {
+    const relBrd = path.relative(targetDir, fPath);
+    surroundingSystems.get(targetSys).sources.add(`[SRC:BRD:${relBrd}]`);
+  }
+});
 
 // -------------------------------------------------------------
 // 6. GENERATE 01-ground-truth/api-inventory.md

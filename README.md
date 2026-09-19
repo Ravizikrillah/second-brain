@@ -58,6 +58,56 @@ All commands are single-token hyphenated commands accessible in agent conversati
 
 ---
 
+## 🌐 External Repositories & Living Ground Truth
+
+Second Brain connects directly to live backend and frontend microservices without copying external git repositories into this workspace:
+
+### 1. Declarative Configuration (`second-brain.json`)
+Create `second-brain.json` (or `.brainrc.json`) in your workspace root:
+```json
+{
+  "name": "My Architecture",
+  "sources": {
+    "code": [
+      "../services/order-service",
+      "../services/payment-service",
+      "../apps/customer-web"
+    ],
+    "ddl": [
+      "../services/order-service/migrations",
+      "../services/payment-service/db"
+    ]
+  }
+}
+```
+
+### 2. CLI Overrides
+Run ingestion directly targeting external directories:
+```bash
+# Ingest live microservice code directly
+node ./bin/ingest-apis.js --code=../backend/order-service
+
+# Ingest external migrations
+node ./bin/ingest-ddl.js --ddl=../backend/order-service/migrations
+```
+
+### 3. Zero-Footprint Symlinks
+Create symlinks in `00-raw-inputs/existing-code/` (`ln -s /path/to/repo ./00-raw-inputs/existing-code/`). This directory is git-ignored, ensuring zero bloat in your Second Brain git history.
+
+### 4. 🔄 Instant Living Sync on `git pull`
+Whenever upstream developers push changes:
+```bash
+# Pull changes in external service repo
+cd ../backend/order-service && git pull
+
+# Re-sync Second Brain ground truth immediately
+cd ../second-brain && npm run ingest:apis && npm run ingest:ddl
+# or inside agent chat: /brain-ingest
+```
+Second Brain immediately parses the latest routes, protobuf contracts, DTO structs, and SQL migrations, idempotently refreshing `01-ground-truth/` in seconds.
+
+---
+
 ## 🏛️ The 6-Zone Directory Architecture
 
 ```text

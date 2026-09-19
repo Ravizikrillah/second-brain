@@ -39,7 +39,7 @@ const binTargetDir = path.join(targetDir, 'bin');
 const packageRoot = path.resolve(__dirname, '..');
 
 if (targetDir !== packageRoot) {
-  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'init.js', 'organize.js'].forEach(script => {
+  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'init.js', 'organize.js', 'source-resolver.js'].forEach(script => {
     const src = path.join(binSourceDir, script);
     const dest = path.join(binTargetDir, script);
     if (fs.existsSync(src)) {
@@ -67,6 +67,36 @@ if (targetDir !== packageRoot) {
     fs.writeFileSync(targetPackageJson, pkgContent, 'utf8');
     console.log(`  📦 Generated package.json with audit & ingest scripts`);
   }
+
+  const configPath = path.join(targetDir, 'second-brain.json');
+  if (!fs.existsSync(configPath)) {
+    const starterConfig = {
+      "$schema": "https://raw.githubusercontent.com/Ravizikrillah/second-brain/main/schema.json",
+      "name": path.basename(targetDir),
+      "sources": {
+        "code": [
+          "./00-raw-inputs/existing-code"
+        ],
+        "ddl": [
+          "./00-raw-inputs/db"
+        ],
+        "brd": [
+          "./00-raw-inputs/brd"
+        ],
+        "mom": [
+          "./00-raw-inputs/mom"
+        ],
+        "figma": [
+          "./00-raw-inputs/figma"
+        ]
+      },
+      "rules": {
+        "precedence": ["code", "ddl", "brd", "adr", "mom", "chat"]
+      }
+    };
+    fs.writeFileSync(configPath, JSON.stringify(starterConfig, null, 2) + '\n', 'utf8');
+    console.log(`  ⚙️  Scaffolded source configuration: second-brain.json`);
+  }
 }
 
 const starterFiles = [
@@ -89,7 +119,7 @@ const starterFiles = [
   },
   {
     path: '00-raw-inputs/existing-code/README.md',
-    content: `# Existing Code Snippets & Models\n\nPlace active backend handlers, entity structs, route definitions, and service interfaces here.\n`
+    content: `# Existing Code Snippets & Models\n\nYou have 3 ways to connect existing codebases to Second Brain:\n\n1. **Config File (Recommended for external git repositories)**:\n   Add external repo paths to \`second-brain.json\` without copying or committing large repos:\n   \`\`\`json\n   {\n     "sources": {\n       "code": ["../my-backend-repo", "../my-frontend-repo"],\n       "ddl": ["../my-backend-repo/migrations"]\n     }\n   }\n   \`\`\`\n\n2. **Symlink (\`ln -s\`)**:\n   Create symlinks inside this directory:\n   \`\`\`bash\n   ln -s /path/to/my-backend ./00-raw-inputs/existing-code/my-backend\n   \`\`\`\n   *(This directory is git-ignored so external repos are never committed to Second Brain git.)*\n\n3. **Physical Copy / Drop**:\n   Place backend microservice folders, Go routers, Python/TS DTOs, and YAML configs directly here.\n`
   },
   {
     path: '00-raw-inputs/mom/README.md',

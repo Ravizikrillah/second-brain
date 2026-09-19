@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveSources, findFiles: resolveFindFiles } = require('./source-resolver');
 
 const targetDir = process.cwd();
 
@@ -141,21 +142,24 @@ if (fs.existsSync(contradictionFile)) {
 }
 
 // 4. Audit DDL Table Completeness
-const dbDir = path.join(targetDir, '00-raw-inputs', 'db');
+const ddlResolution = resolveSources('ddl', { targetDir });
 const catalogFile = path.join(targetDir, '01-ground-truth', 'entity-catalog.md');
 let ddlTableCount = 0;
 let catalogedTableCount = 0;
 const missingTables = [];
 
-if (fs.existsSync(dbDir)) {
-  const sqlFiles = fs.readdirSync(dbDir).filter(f => f.endsWith('.sql'));
+const validDdlSources = ddlResolution.sources.filter(s => s.exists);
+if (validDdlSources.length > 0) {
   const foundTables = new Set();
-  sqlFiles.forEach(file => {
-    const content = fs.readFileSync(path.join(dbDir, file), 'utf8');
-    const matches = content.matchAll(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|")?([a-zA-Z0-9_]+)(?:`|")?\s*\(/gmi);
-    for (const m of matches) {
-      foundTables.add(m[1].toLowerCase());
-    }
+  validDdlSources.forEach(src => {
+    const sqlFiles = resolveFindFiles(src.path, f => f.endsWith('.sql'));
+    sqlFiles.forEach(file => {
+      const content = fs.readFileSync(file, 'utf8');
+      const matches = content.matchAll(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|")?([a-zA-Z0-9_]+)(?:`|")?\s*\(/gmi);
+      for (const m of matches) {
+        foundTables.add(m[1].toLowerCase());
+      }
+    });
   });
   ddlTableCount = foundTables.size;
 
@@ -179,11 +183,13 @@ if (fs.existsSync(dbDir)) {
 }
 
 // 5. Audit BRDs Discovered
-const brdDir = path.join(targetDir, '00-raw-inputs', 'brd');
+const brdResolution = resolveSources('brd', { targetDir });
 let totalBrds = 0;
-if (fs.existsSync(brdDir)) {
-  totalBrds = fs.readdirSync(brdDir).filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md').length;
-}
+const validBrdSources = brdResolution.sources.filter(s => s.exists);
+validBrdSources.forEach(src => {
+  const brdFiles = resolveFindFiles(src.path, f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md');
+  totalBrds += brdFiles.length;
+});
 
 // 6. Audit Delivery Plan Tasks (if exists)
 const planFile = path.join(targetDir, '02-provenance', 'delivery-plan.md');
@@ -204,6 +210,8 @@ if (fs.existsSync(planFile)) {
 
 // 7. Audit API Inventory Disambiguation (Internal vs Surrounding Systems)
 const apiInventoryFile = path.join(targetDir, '01-ground-truth', 'api-inventory.md');
+const codeResolution = resolveSources('code', { targetDir });
+const hasCodeSources = codeResolution.sources.some(s => s.exists);
 let internalServicesCount = 0;
 let surroundingSystemsCount = 0;
 let apiInventoryDisambiguated = false;
@@ -219,7 +227,7 @@ if (fs.existsSync(apiInventoryFile)) {
     internalServicesCount = internalMatches.length;
     const surroundingMatches = apiContent.match(/####\s+🌐\s+`([^`]+)`/g) || [];
     surroundingSystemsCount = surroundingMatches.length;
-  } else if (fs.existsSync(path.join(targetDir, '00-raw-inputs', 'existing-code'))) {
+  } else if (hasCodeSources) {
     violations.push({
       file: '01-ground-truth/api-inventory.md',
       line: 1,
