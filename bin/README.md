@@ -22,6 +22,7 @@ Welcome to the **CLI Tools** directory. This folder contains zero-dependency, de
 | **`ingest-apis.js`** | `npm run ingest:apis` | Deterministic API and Surrounding System parser. Scans declarative Go routers (`ge.Route`), imperative routers, gRPC Protobuf, DTO models, and KrakenD configs into `01-ground-truth/api-inventory.md`. |
 | **`ingest-brd.js`** | `npm run ingest:brd` | Deterministic BRD/PRD parser. Extracts functional requirements (`REQ-XX`), RBAC role-permission matrices, and business rules into `01-ground-truth/business-rules.md`. |
 | **`generate-api-sequences.js`** | `npm run deliver:apis` | 1-to-1 PlantUML sequence diagram generator. Produces exhaustive sequence diagrams for every backend endpoint in `04-deliverables/sequence-diagrams/apis/<service>/`. |
+| **`sync.js`** | `npm run sync`<br>`npm run diff`<br>`npm run sync:check` | Living Architecture & Documentation Drift Synchronizer. Detects drift between upstream code/DDL repositories and Second Brain, conducts gap analysis, and auto-synchronizes Ground Truth and deliverables. |
 | **`audit.js`** | `npm run audit`<br>`npm test` | Automated provenance and integrity auditor. Validates 100% `[SRC:...]` tag coverage on deliverables, asserts DDL completeness, checks API disambiguation, and blocks on active contradictions. |
 
 
@@ -50,6 +51,12 @@ npm run ingest
 
 # Generate 1-to-1 PlantUML sequence diagrams for all internal APIs
 node ./bin/generate-api-sequences.js
+
+# Detect architectural drift (gap analysis dry-run)
+node ./bin/sync.js --dry-run
+
+# Reconcile and synchronize Ground Truth with upstream changes
+node ./bin/sync.js --apply
 
 # Run full provenance and consistency audit
 node ./bin/audit.js
