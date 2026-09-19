@@ -149,9 +149,13 @@ let catalogedTableCount = 0;
 const missingTables = [];
 
 const validDdlSources = ddlResolution.sources.filter(s => s.exists);
-if (validDdlSources.length > 0) {
+const auditCodeResolution = resolveSources('code', { targetDir });
+const validAuditCodeSources = auditCodeResolution.sources.filter(s => s.exists && s.isDirectory);
+const allDdlCheckSources = [...validDdlSources, ...validAuditCodeSources];
+
+if (allDdlCheckSources.length > 0) {
   const foundTables = new Set();
-  validDdlSources.forEach(src => {
+  allDdlCheckSources.forEach(src => {
     const sqlFiles = resolveFindFiles(src.path, f => f.endsWith('.sql'));
     sqlFiles.forEach(file => {
       const content = fs.readFileSync(file, 'utf8');

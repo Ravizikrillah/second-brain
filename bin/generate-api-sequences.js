@@ -103,12 +103,22 @@ lines.forEach(line => {
   }
 });
 
-const totalEndpointsFound = services.reduce((acc, s) => acc + s.endpoints.length, 0);
-console.log(`🔍 Cataloged ${services.length} internal microservice(s) and ${totalEndpointsFound} total endpoint(s).`);
+// Parse --service / -s flag for targeted sequence diagram generation
+const serviceArg = process.argv.find(a => a.startsWith('--service='))?.split('=')[1] ||
+  (process.argv.indexOf('--service') !== -1 ? process.argv[process.argv.indexOf('--service') + 1] : null) ||
+  (process.argv.indexOf('-s') !== -1 ? process.argv[process.argv.indexOf('-s') + 1] : null);
+
+let activeServices = services;
+if (serviceArg) {
+  activeServices = services.filter(s => s.name.toLowerCase().includes(serviceArg.toLowerCase()));
+  console.log(`🎯 Targeted Service Filter: '${serviceArg}' (${activeServices.length} matching service(s))`);
+}
+
+const totalEndpointsFound = activeServices.reduce((acc, s) => acc + s.endpoints.length, 0);
+console.log(`🔍 Cataloged ${activeServices.length} internal microservice(s) and ${totalEndpointsFound} total endpoint(s).`);
 
 if (totalEndpointsFound === 0) {
-  console.log(`⚠️  No internal microservice endpoints found in ${path.relative(targetDir, apiInventoryFile)}.`);
-  console.log(`   Run 'npm run ingest:apis' on your codebase first.\n`);
+  console.log(`⚠️  No internal microservice endpoints found in ${path.relative(targetDir, apiInventoryFile)} matching filter.`);
   process.exit(0);
 }
 
@@ -152,7 +162,7 @@ let generatedCount = 0;
 let skippedHealthCount = 0;
 const generatedTasks = [];
 
-services.forEach(svc => {
+activeServices.forEach(svc => {
   const svcDir = path.join(outputBaseDir, svc.name);
   if (!fs.existsSync(svcDir)) {
     fs.mkdirSync(svcDir, { recursive: true });

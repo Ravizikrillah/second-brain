@@ -24,3 +24,4 @@ When working in this repository:
    - `/brain-query <query>`: Interactive Q&A across ground truth, active DDL, and deliverables.
    - `/brain-impact <target>`: Change Request (CR) & Blast Radius Analyzer.
    - `/brain-story <feature>`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC.
+   - `/brain-sync [--diff/--dry-run/--apply]`: Living Architecture & Documentation Synchronizer. Auto-detects drift across git repositories and synchronizes Ground Truth & 1-to-1 sequence diagrams. (Alias: `/brain-diff`).

@@ -63,6 +63,24 @@ validSources.forEach(source => {
   }
 });
 
+// Also scan code sources for embedded database migrations (e.g. repo/migrations, services/*/db)
+const codeResolution = resolveSources('code', { targetDir });
+const validCodeSources = codeResolution.sources.filter(s => s.exists && s.isDirectory);
+validCodeSources.forEach(codeSrc => {
+  const embeddedSql = findFiles(codeSrc.path, file => file.endsWith('.sql') || file.endsWith('.prisma'));
+  embeddedSql.forEach(absFile => {
+    if (!discoveredFiles.some(f => f.absPath === absFile)) {
+      discoveredFiles.push({
+        absPath: absFile,
+        sourceName: codeSrc.name,
+        cleanFile: sanitizeProvenancePath(absFile, { targetDir, sourceRoot: codeSrc.path, sourceName: codeSrc.name }),
+        relToSource: path.relative(codeSrc.path, absFile),
+        type: absFile.endsWith('.prisma') ? 'prisma' : 'sql'
+      });
+    }
+  });
+});
+
 if (discoveredFiles.length === 0) {
   console.log(`⚠️  No .sql or .prisma files found across ${validSources.length} source directory(ies).`);
   process.exit(0);

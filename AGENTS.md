@@ -60,3 +60,4 @@ If a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:
 - `/brain-query <query>`: Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations.
 - `/brain-impact <target>`: Change Request (CR) & Blast Radius Analyzer across schemas, API contracts, sequence diagrams, and consumers.
 - `/brain-story <feature>`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC, API specs, and sequence slices.
+- `/brain-sync [--diff/--dry-run/--apply]`: Living Architecture & Documentation Drift Synchronizer. Inspects upstream git commits, detects delta/gap in schemas & endpoints, and automatically updates Ground Truth and 1-to-1 sequence diagrams. (`/brain-diff` is an alias for `/brain-sync --diff`).

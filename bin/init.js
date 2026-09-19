@@ -70,7 +70,7 @@ const binTargetDir = path.join(targetDir, 'bin');
 const packageRoot = path.resolve(__dirname, '..');
 
 if (targetDir !== packageRoot) {
-  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'ingest-brd.js', 'generate-api-sequences.js', 'init.js', 'organize.js', 'source-resolver.js'].forEach(script => {
+  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'ingest-brd.js', 'generate-api-sequences.js', 'init.js', 'organize.js', 'source-resolver.js', 'sync.js'].forEach(script => {
     const src = path.join(binSourceDir, script);
     const dest = path.join(binTargetDir, script);
     if (fs.existsSync(src)) {
@@ -121,6 +121,8 @@ if (targetDir !== packageRoot) {
         "ingest:apis": "node ./bin/ingest-apis.js",
         "ingest:brd": "node ./bin/ingest-brd.js",
         "deliver:apis": "node ./bin/generate-api-sequences.js",
+        "sync": "node ./bin/sync.js",
+        "sync:check": "node ./bin/sync.js --dry-run",
         "audit": "node ./bin/audit.js",
         "test": "node ./bin/audit.js"
       }
