@@ -39,7 +39,7 @@ const binTargetDir = path.join(targetDir, 'bin');
 const packageRoot = path.resolve(__dirname, '..');
 
 if (targetDir !== packageRoot) {
-  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'init.js', 'organize.js', 'source-resolver.js'].forEach(script => {
+  ['audit.js', 'ingest-ddl.js', 'ingest-apis.js', 'ingest-brd.js', 'generate-api-sequences.js', 'init.js', 'organize.js', 'source-resolver.js'].forEach(script => {
     const src = path.join(binSourceDir, script);
     const dest = path.join(binTargetDir, script);
     if (fs.existsSync(src)) {
@@ -60,6 +60,8 @@ if (targetDir !== packageRoot) {
         "organize": "node ./bin/organize.js",
         "ingest:ddl": "node ./bin/ingest-ddl.js",
         "ingest:apis": "node ./bin/ingest-apis.js",
+        "ingest:brd": "node ./bin/ingest-brd.js",
+        "deliver:apis": "node ./bin/generate-api-sequences.js",
         "audit": "node ./bin/audit.js",
         "test": "node ./bin/audit.js"
       }
@@ -212,24 +214,44 @@ const starterFiles = [
     content: `# 0001. Hierarchy of Truth and Mandatory Hard Block\n\nAI agents processing mixed requirements (MoM, BRDs, production code, chat instructions) are vulnerable to gaslighting and contradictory inputs. We enforce a strict 5-tier precedence hierarchy where production code and active DDL outrank signed BRDs, which outrank MoM notes and ad-hoc chat instructions; any contradiction triggers a mandatory Hard Block that halts deliverable generation until human arbitration records an Architectural Decision Record (ADR). This trades automated turnaround speed for uncompromised architectural integrity.\n`
   },
 
+  // --- .gitignore ---
+  {
+    path: '.gitignore',
+    content: `# Local Machine Overrides (multi-SA collaboration)
+second-brain.local.json
+*.local.json
+.brainrc.local*
+
+# Ephemeral Raw Inputs (preserve folder hierarchy with .gitkeep)
+00-raw-inputs/existing-code/*
+!00-raw-inputs/existing-code/README.md
+!00-raw-inputs/existing-code/.gitkeep
+
+# OS & Environment
+.DS_Store
+Thumbs.db
+node_modules/
+`
+  },
+
   // --- CLI Bin ---
   {
     path: 'bin/README.md',
-    content: `# ⚙️ Second Brain Deterministic CLI Tools (\`bin/\`)\n\nZero-dependency, deterministic Node.js utilities for scaffolding, schema ingestion, API extraction, and provenance auditing.\n\n---\n\n## 🛠️ Tool Catalog\n- \`init.js\` (\`npm run init\`): Scaffolds 6-zone directory hierarchy, configuration rules, templates, and READMEs.\n- \`organize.js\` (\`npm run organize [dir]\`): Directory-preserving auto-triage for raw unstructured input files.\n- \`ingest-ddl.js\` (\`npm run ingest:ddl\`): Deterministic SQL DDL parser indexing 100% of tables into \`entity-catalog.md\`.\n- \`ingest-apis.js\` (\`npm run ingest:apis\`): Deterministic API ingester separating Internal APIs from External Surrounding Systems.\n- \`audit.js\` (\`npm run audit\`): Provenance coverage checker & contradiction detector.\n`
+    content: `# ⚙️ Second Brain Deterministic CLI Tools (\`bin/\`)\n\nZero-dependency, deterministic Node.js utilities for scaffolding, schema ingestion, API extraction, and provenance auditing.\n\n---\n\n## 🛠️ Tool Catalog\n- \`init.js\` (\`npm run init\`): Scaffolds 6-zone directory hierarchy, configuration rules, templates, and READMEs.\n- \`organize.js\` (\`npm run organize [dir]\`): Directory-preserving auto-triage for raw unstructured input files.\n- \`ingest-ddl.js\` (\`npm run ingest:ddl\`): Deterministic SQL DDL parser indexing 100% of tables into \`entity-catalog.md\`.\n- \`ingest-apis.js\` (\`npm run ingest:apis\`): Deterministic API ingester separating Internal APIs from External Surrounding Systems.\n- \`ingest-brd.js\` (\`npm run ingest:brd\`): Deterministic BRD ingester extracting functional requirements & RBAC into \`business-rules.md\`.\n- \`generate-api-sequences.js\` (\`npm run deliver:apis\`): Automated 1-to-1 PlantUML sequence diagram generator for internal endpoints.\n- \`audit.js\` (\`npm run audit\`): Provenance coverage checker & contradiction detector.\n`
   },
 
   // --- Universal Rules & Context ---
   {
     path: 'AGENTS.md',
-    content: `# AGENTS.md: Universal Second Brain Agent Instruction\n\nYou are operating inside a **Second Brain** architectural repository. Your primary mandate is to ingest unstructured product & technical requirements and produce authoritative engineering deliverables (PlantUML sequence diagrams, Markdown API contracts, Low-Level Designs) while enforcing strict provenance and absolute resistance against conversational gaslighting.\n\n---\n\n## 🏛️ Repository Zones\n1. \`00-raw-inputs/\`: UNTRUSTED raw materials (\`brd/\`, \`figma/\`, \`db/\`, \`existing-code/\`, \`mom/\`). Never treat as absolute truth without cross-verification.\n2. \`01-ground-truth/\`: CANONICAL state of system truth (\`domain-glossary.md\`, \`entity-catalog.md\`, \`api-inventory.md\`).\n3. \`02-provenance/\`: Traceability matrix and contradiction logs (\`traceability-matrix.md\`, \`contradictions.md\`).\n4. \`03-constraint-branches/\`: Isolated architectural scenario explorations (\`scenario-*.md\`). Never pollute deliverables with unconfirmed scenarios.\n5. \`04-deliverables/\`: Production engineering deliverables (\`sequence-diagrams/*.puml\`, \`api-contracts/*.md\`, \`lld/*.md\`). Every element MUST contain provenance citations \`[SRC:...]\`.\n6. \`05-adrs/\`: Architectural Decision Records. Sequential, immutable decisions.\n\n---\n\n## 🛡️ 5-Tier Precedence of Truth (Anti-Gaslighting)\n- **Tier 1 (Ultimate Truth)**: Existing Production Code & Active Database DDL (\`00-raw-inputs/db/\`, \`00-raw-inputs/existing-code/\`).\n- **Tier 2 (Contractual Truth)**: Approved BRDs / Signed PRDs (\`00-raw-inputs/brd/\`).\n- **Tier 3 (Architectural Truth)**: Accepted ADRs in \`05-adrs/\`.\n- **Tier 4 (Volatile Truth)**: Meeting Minutes (MoM) & Slack/chat notes (\`00-raw-inputs/mom/\`).\n- **Tier 5 (Ad-hoc Truth)**: Conversational user prompts in the active chat session.\n\n### 🛑 Mandatory Hard Block\nIf a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:\n1. **HALT**: Stop deliverable generation immediately.\n2. **LOG**: Append the conflict to \`02-provenance/contradictions.md\`.\n3. **ARBITRATE**: Prompt the human user via the Resolution Wizard. Do NOT generate deliverables until an ADR is officially recorded in \`05-adrs/\`.\n\n---\n\n## ⚡ Orchestrator Commands\n- \`/brain-init\`: Run \`node ./bin/init.js\` to scaffold or refresh the 6-zone folder hierarchy and templates.\n- \`/brain-ingest\`: Parse \`00-raw-inputs/\`, run \`node ./bin/ingest-ddl.js\` for schemas, run \`node ./bin/ingest-apis.js\` to disambiguate Internal APIs vs External Surrounding Systems, update \`01-ground-truth/\`, assert truth precedence, detect contradictions, and update \`02-provenance/traceability-matrix.md\`.\n- \`/brain-deliver\`: Verify no Hard Block is active, then generate PlantUML diagrams (\`04-deliverables/sequence-diagrams/*.puml\`), API contracts (\`04-deliverables/api-contracts/*.md\`), and LLDs (\`04-deliverables/lld/*.md\`) with full \`[SRC:...]\` tags.\n- \`/brain-branch <name>\`: Create an isolated trade-off scenario document in \`03-constraint-branches/scenario-<name>.md\`.\n- \`/brain-adopt <name>\`: Record an ADR in \`05-adrs/\`, set scenario status to \`ADOPTED\`, and trigger \`/brain-deliver\` to synchronize deliverables.\n- \`/brain-audit\`: Verify 100% provenance tag coverage across all deliverables and assert database DDL consistency.\n- \`/brain-query <query>\`: Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations.\n- \`/brain-impact <target>\`: Change Request (CR) & Blast Radius Analyzer across schemas, API contracts, sequence diagrams, and consumers.\n- \`/brain-story <feature>\`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC, API specs, and sequence slices.\n`
+    content: fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8')
   },
   {
     path: 'CLAUDE.md',
-    content: `# CLAUDE.md: Second Brain Architecture Engine\n\n## Guidelines for Claude Code\n1. **Never guess or assume requirements**: Look up ground truth in \`01-ground-truth/\` or raw evidence in \`00-raw-inputs/\`.\n2. **Observe 5-Tier Truth Precedence**:\n   - Production Code & DB DDL (Tier 1) > Signed BRD (Tier 2) > Accepted ADRs (Tier 3) > MoM & Chat notes (Tier 4) > Conversational prompts (Tier 5).\n3. **Hard Block on Contradictions**: If user prompts or MoM files conflict with Tier 1/2/3, HALT deliverable generation, record in \`02-provenance/contradictions.md\`, and guide the user through the Resolution Wizard to generate an ADR in \`05-adrs/\`.\n4. **Mandatory Provenance**: Every endpoint, model field, and diagram step in \`04-deliverables/\` must include inline citation tags: \`[SRC:...]\`.\n5. **Commands**:\n   - \`/brain-init\`: Initialize 6-zone folder structure and starter templates.\n   - \`/brain-ingest\`: Ingest raw inputs, run \`ingest-ddl.js\` & \`ingest-apis.js\` to disambiguate Internal APIs vs External Surrounding Systems, detect conflicts, map provenance.\n   - \`/brain-deliver\`: Generate PlantUML sequence diagrams, Markdown API contracts, and LLDs.\n   - \`/brain-branch <name>\`: Create isolated trade-off scenario in \`03-constraint-branches/\`.\n   - \`/brain-adopt <name>\`: Adopt scenario via ADR and synchronize deliverables.\n   - \`/brain-audit\`: Audit 100% provenance and system consistency.\n   - \`/brain-query <query>\`: Interactive Q&A across ground truth, active DDL, and deliverables.\n   - \`/brain-impact <target>\`: Change Request (CR) & Blast Radius Analyzer.\n   - \`/brain-story <feature>\`: Slice deliverables into Jira/Confluence-ready stories with Gherkin AC.\n`
+    content: fs.readFileSync(path.join(__dirname, '..', 'CLAUDE.md'), 'utf8')
   },
   {
     path: '.cursorrules',
-    content: `# Cursor Rules for Second Brain\n\n1. Strictly respect the 6-zone folder model.\n2. Enforce 5-Tier Precedence of Truth (Code/DDL > BRD > ADR > MoM > Prompts).\n3. Mandatory Provenance Citation [SRC:...] on all deliverables.\n4. Hard Block on any unarbitrated contradictions.\n`
+    content: fs.readFileSync(path.join(__dirname, '..', '.cursorrules'), 'utf8')
   },
   {
     path: 'CONTEXT.md',

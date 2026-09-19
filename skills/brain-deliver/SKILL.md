@@ -25,6 +25,7 @@ Parse the command argument:
 - `/brain-deliver <feature-name>` (e.g. `/brain-deliver checkout` or `/brain-deliver DEL-01`): Focuses solely on that specific task from `02-provenance/delivery-plan.md`.
 - `/brain-deliver next` (or `/brain-deliver` without args): Finds the **first pending task (`[ ]`)** in `02-provenance/delivery-plan.md` and executes it.
 - `/brain-deliver all`: Iterates through all remaining pending tasks in sequence, producing complete artifacts for each until the manifest is 100% complete.
+- `/brain-deliver apis` (or `npm run deliver:apis`): Generates 1-to-1 granular PlantUML sequence diagrams in `04-deliverables/sequence-diagrams/apis/<service>/` for **every single backend API endpoint** in `01-ground-truth/api-inventory.md`, linking database DDL schemas, ingress routing, response notes, and updating `02-provenance/delivery-plan.md` automatically.
 
 ### 3. 📄 Generate Authoritative Deliverables (Universal Architecture Standards)
 For the selected task/feature, produce the complete deliverable suite in `04-deliverables/`:

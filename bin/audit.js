@@ -237,14 +237,41 @@ if (fs.existsSync(apiInventoryFile)) {
   }
 }
 
-// 8. Calculate Coverage & Metrics
+// 8. Audit 1-to-1 API Sequence Coverage
+let totalApiEndpoints = 0;
+let coveredApiSequences = 0;
+if (fs.existsSync(apiInventoryFile)) {
+  const apiContent = fs.readFileSync(apiInventoryFile, 'utf8');
+  const epMatches = apiContent.match(/-\s+`(?:GET|POST|PUT|DELETE|PATCH)\s+([^`]+)`/gi) || [];
+  const domainEps = epMatches.filter(e => !e.includes('health') && !e.includes('metrics'));
+  totalApiEndpoints = domainEps.length;
+
+  const seqApisDir = path.join(targetDir, '04-deliverables', 'sequence-diagrams', 'apis');
+  if (fs.existsSync(seqApisDir)) {
+    const pumlFiles = resolveFindFiles(seqApisDir, f => f.endsWith('.puml'));
+    coveredApiSequences = pumlFiles.length;
+  }
+}
+
+// 8b. Audit Business Rules Ground Truth (business-rules.md)
+const businessRulesFile = path.join(targetDir, '01-ground-truth', 'business-rules.md');
+let businessRulesStatus = 'N/A';
+if (fs.existsSync(businessRulesFile)) {
+  const brContent = fs.readFileSync(businessRulesFile, 'utf8');
+  const reqMatches = brContent.match(/\|\s+\*\*`REQ-[^`]+`\*\*\s+\|/g) || [];
+  const ruleMatches = brContent.match(/###\s+3\.\d+\s+/g) || [];
+  businessRulesStatus = `Active (${reqMatches.length} Reqs, ${ruleMatches.length} Rules)`;
+}
+
+// 9. Calculate Coverage & Metrics
 const coverage = totalElements === 0 ? 100 : ((taggedElements / totalElements) * 100).toFixed(1);
 const planStatus = totalTasks === 0 ? 'N/A' : `${completedTasks}/${totalTasks} (${((completedTasks / totalTasks) * 100).toFixed(0)}%)`;
 const ddlStatus = ddlTableCount === 0 ? 'N/A' : `${catalogedTableCount}/${ddlTableCount} (${((catalogedTableCount / ddlTableCount) * 100).toFixed(0)}%)`;
 const brdStatus = totalBrds === 0 ? 'N/A' : `${totalBrds} file(s)`;
 const apiStatus = !fs.existsSync(apiInventoryFile) ? 'Missing' : (apiInventoryDisambiguated ? `${internalServicesCount} Internal | ${surroundingSystemsCount} External` : 'Ambiguous');
+const apiSeqStatus = totalApiEndpoints === 0 ? 'N/A' : `${coveredApiSequences}/${totalApiEndpoints} (${((coveredApiSequences / totalApiEndpoints) * 100).toFixed(0)}%)`;
 
-// 9. Output Audit Scorecard
+// 10. Output Audit Scorecard
 console.log(`┌────────────────────────────────────────────────────────────┐`);
 console.log(`│                    AUDIT SCORECARD                         │`);
 console.log(`├────────────────────────────────────────────────────────────┤`);
@@ -254,6 +281,8 @@ console.log(`│ Provenance Tag Coverage            : ${String(coverage + ' %').
 console.log(`│ Active Hard Block Contradictions   : ${String(unresolvedContradictions).padEnd(21)} │`);
 console.log(`│ DDL Schema Completeness            : ${String(ddlStatus).padEnd(21)} │`);
 console.log(`│ API Inventory Disambiguation       : ${String(apiStatus).padEnd(21)} │`);
+console.log(`│ 1-to-1 API Sequence Coverage       : ${String(apiSeqStatus).padEnd(21)} │`);
+console.log(`│ Business Rules Ground Truth        : ${String(businessRulesStatus).padEnd(21)} │`);
 console.log(`│ Product BRDs Discovered            : ${String(brdStatus).padEnd(21)} │`);
 console.log(`│ Delivery Plan Task Completion      : ${String(planStatus).padEnd(21)} │`);
 console.log(`└────────────────────────────────────────────────────────────┘\n`);

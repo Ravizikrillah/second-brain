@@ -41,14 +41,75 @@ const IGNORED_DIRS = new Set([
 ]);
 
 /**
- * Expand tilde (~) in file paths
+ * Expand environment variables ($VAR or ${VAR}) in strings
+ */
+function expandEnv(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str.replace(/\$(?:\{([a-zA-Z0-9_]+)\}|([a-zA-Z0-9_]+))/g, (_, k1, k2) => {
+    const key = k1 || k2;
+    return process.env[key] !== undefined ? process.env[key] : '';
+  });
+}
+
+/**
+ * Expand tilde (~) and environment variables in file paths
  */
 function expandHome(filepath) {
   if (!filepath) return filepath;
-  if (filepath.startsWith('~/') || filepath === '~') {
-    return path.join(os.homedir(), filepath.slice(1));
+  let p = expandEnv(filepath);
+  if (p.startsWith('~/') || p === '~') {
+    return path.join(os.homedir(), p.slice(1));
   }
-  return filepath;
+  return p;
+}
+
+/**
+ * Sanitize absolute machine filepaths into portable relative provenance tags.
+ * Strips host-specific prefixes (/Users/ravi, /home/budi, C:\Users\...) and
+ * normalizes to [service_name]/internal/path...
+ */
+function sanitizeProvenancePath(filePath, options = {}) {
+  if (!filePath) return '';
+  let p = filePath.replace(/\\/g, '/');
+
+  // Strip line numbers / column if present temporarily
+  let suffix = '';
+  const lineMatch = p.match(/(#L\d+(?:-L\d+)?(?::[a-zA-Z0-9_.]*)?)$/);
+  if (lineMatch) {
+    suffix = lineMatch[1];
+    p = p.slice(0, -suffix.length);
+  }
+
+  // If within targetDir/workspace
+  const targetDir = (options.targetDir || process.cwd()).replace(/\\/g, '/');
+  if (p.startsWith(targetDir + '/')) {
+    p = p.slice(targetDir.length + 1);
+  }
+
+  // If specific source root provided, relativize to service name
+  if (options.sourceRoot) {
+    const root = options.sourceRoot.replace(/\\/g, '/');
+    if (p.startsWith(root + '/')) {
+      const sub = p.slice(root.length + 1);
+      const base = options.sourceName || path.basename(root);
+      p = `${base}/${sub}`;
+    }
+  }
+
+  // Strip absolute user home directories from any OS (Mac, Linux, Windows)
+  p = p.replace(/^\/(?:Users|home)\/[^/]+\/(?:[^/]+\/)*(?:Source Code BE|Source Code FE|repos?|code|projects?|workspace)\//i, '');
+  p = p.replace(/^[a-zA-Z]:\/(?:Users|Users and Settings)\/[^/]+\/(?:[^/]+\/)*(?:Source Code BE|Source Code FE|repos?|code|projects?|workspace)\//i, '');
+  p = p.replace(/^\/(?:Users|home)\/[^/]+\//, '');
+  p = p.replace(/^[a-zA-Z]:\/Users\/[^/]+\//, '');
+
+  // Strip standard raw-inputs prefixes if present
+  p = p.replace(/^00-raw-inputs\/existing-code\/(?:Source Code BE\/|Source Code FE\/)?/, '');
+  p = p.replace(/^00-raw-inputs\/db\//, '');
+  p = p.replace(/^00-raw-inputs\/brd\//, '');
+  p = p.replace(/^00-raw-inputs\/mom\//, '');
+  p = p.replace(/^00-raw-inputs\/figma\//, '');
+
+  return p + suffix;
 }
 
 /**
@@ -94,34 +155,84 @@ function parseCliArgs() {
 }
 
 /**
- * Load and parse second-brain.json or .brainrc.json if present
+ * Load and parse second-brain.json or .brainrc.json.
+ * Supports second-brain.local.json for local machine overrides (git-ignored),
+ * allowing multi-SA collaboration without path conflicts.
  */
 function loadConfig(targetDir = process.cwd(), customConfigPath = null) {
-  const candidates = customConfigPath
-    ? [path.resolve(targetDir, expandHome(customConfigPath))]
-    : [
-        path.join(targetDir, 'second-brain.json'),
-        path.join(targetDir, '.brainrc.json'),
-        path.join(targetDir, '.brainrc')
-      ];
+  if (customConfigPath) {
+    const resolved = path.resolve(targetDir, expandHome(customConfigPath));
+    if (fs.existsSync(resolved)) {
+      try {
+        const raw = fs.readFileSync(resolved, 'utf8');
+        const parsed = JSON.parse(raw);
+        return {
+          configPath: resolved,
+          name: parsed.name || 'Second Brain Workspace',
+          sources: parsed.sources || {}
+        };
+      } catch (err) {
+        console.warn(`⚠️  Warning: Failed to parse configuration file at ${resolved}: ${err.message}`);
+      }
+    }
+    return { configPath: null, name: null, sources: {} };
+  }
 
-  for (const candidate of candidates) {
+  // Check for local overrides first (second-brain.local.json)
+  const localCandidates = [
+    path.join(targetDir, 'second-brain.local.json'),
+    path.join(targetDir, '.brainrc.local.json'),
+    path.join(targetDir, '.brainrc.local')
+  ];
+
+  // Shared team configuration (second-brain.json)
+  const sharedCandidates = [
+    path.join(targetDir, 'second-brain.json'),
+    path.join(targetDir, '.brainrc.json'),
+    path.join(targetDir, '.brainrc')
+  ];
+
+  let sharedConfig = { configPath: null, name: null, sources: {} };
+  for (const candidate of sharedCandidates) {
     if (fs.existsSync(candidate)) {
       try {
         const raw = fs.readFileSync(candidate, 'utf8');
         const parsed = JSON.parse(raw);
-        return {
+        sharedConfig = {
           configPath: candidate,
           name: parsed.name || 'Second Brain Workspace',
           sources: parsed.sources || {}
         };
+        break;
       } catch (err) {
         console.warn(`⚠️  Warning: Failed to parse configuration file at ${candidate}: ${err.message}`);
       }
     }
   }
 
-  return { configPath: null, name: null, sources: {} };
+  // Merge with local machine override if present
+  for (const localCandidate of localCandidates) {
+    if (fs.existsSync(localCandidate)) {
+      try {
+        const raw = fs.readFileSync(localCandidate, 'utf8');
+        const parsed = JSON.parse(raw);
+        return {
+          configPath: localCandidate,
+          sharedConfigPath: sharedConfig.configPath,
+          name: parsed.name || sharedConfig.name || 'Second Brain Workspace (Local Machine Override)',
+          sources: {
+            ...sharedConfig.sources,
+            ...(parsed.sources || {})
+          },
+          isLocalOverride: true
+        };
+      } catch (err) {
+        console.warn(`⚠️  Warning: Failed to parse local override at ${localCandidate}: ${err.message}`);
+      }
+    }
+  }
+
+  return sharedConfig;
 }
 
 /**
@@ -260,5 +371,6 @@ module.exports = {
   parseCliArgs,
   resolveSources,
   findFiles,
+  sanitizeProvenancePath,
   IGNORED_DIRS
 };

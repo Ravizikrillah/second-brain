@@ -16,12 +16,16 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveSources, findFiles: resolveFindFiles } = require('./source-resolver');
+const { resolveSources, findFiles: resolveFindFiles, sanitizeProvenancePath } = require('./source-resolver');
 
 const targetDir = process.cwd();
 const codeResolution = resolveSources('code', { targetDir });
 const brdResolution = resolveSources('brd', { targetDir });
 const outputFile = path.join(targetDir, '01-ground-truth', 'api-inventory.md');
+
+function cleanRel(filePath, extra = {}) {
+  return sanitizeProvenancePath(filePath, { targetDir, ...extra });
+}
 
 console.log(`\n🔌 Second Brain Universal Polyglot API & Surrounding System Ingester (Universal Source Resolver)\n`);
 
@@ -255,7 +259,7 @@ console.log(`🔍 Discovered ${configFiles.length} service configuration file(s)
 
 configFiles.forEach(cfgPath => {
   const content = fs.readFileSync(cfgPath, 'utf8');
-  const relPath = path.relative(targetDir, cfgPath);
+  const relPath = cleanRel(cfgPath);
   const baseName = path.basename(cfgPath);
 
   // Extract service name
@@ -319,10 +323,31 @@ configFiles.forEach(cfgPath => {
 });
 
 // Scan all potential microservice root directories across all valid code sources
+const candidateDirs = [];
+const seenCandidateDirs = new Set();
+
+// 1. Dynamic manifest discovery (go.mod, pom.xml, requirements.txt, pyproject.toml, package.json)
+const manifestFiles = scanAllCodeSources((file, fullPath) => {
+  const norm = fullPath.replace(/\\/g, '/').toLowerCase();
+  if (norm.includes('/packages/components/') || norm.includes('/.vite/') || norm.includes('/node_modules/')) return false;
+  if (norm.includes('/packages/') && file === 'package.json') return false;
+  return file === 'go.mod' || file === 'pom.xml' || file === 'requirements.txt' || file === 'pyproject.toml' || file === 'package.json';
+});
+
+manifestFiles.forEach(manifestPath => {
+  const dir = path.dirname(manifestPath);
+  const base = path.basename(dir);
+  if (seenCandidateDirs.has(dir)) return;
+  if (base === 'common' || base === 'pkg' || base === 'packages' || base === 'node_modules' || base === 'dist' || base === 'vendor') return;
+  seenCandidateDirs.add(dir);
+  candidateDirs.push({ name: base, fullDirPath: dir });
+});
+
+// 2. Fallback to standard directory conventions if manifest files not found
 const serviceRootDirs = [];
 validCodeSources.forEach(src => {
   serviceRootDirs.push(src.path);
-  ['repo/backend', 'repo/ai', 'repo/services', 'repo/apps', 'services', 'backend', 'apps', 'packages', 'modules'].forEach(sub => {
+  ['repo/backend', 'repo/ai', 'repo/services', 'repo/apps', 'services', 'backend', 'apps', 'packages', 'modules', 'Source Code BE', 'Source Code FE'].forEach(sub => {
     const subPath = path.join(src.path, sub);
     if (fs.existsSync(subPath)) {
       serviceRootDirs.push(subPath);
@@ -333,30 +358,44 @@ validCodeSources.forEach(src => {
 serviceRootDirs.forEach(rootDir => {
   if (!fs.existsSync(rootDir)) return;
 
-  const candidateDirs = [];
   const isDirectService = fs.existsSync(path.join(rootDir, 'go.mod')) ||
                           fs.existsSync(path.join(rootDir, 'requirements.txt')) ||
                           fs.existsSync(path.join(rootDir, 'pyproject.toml')) ||
                           fs.existsSync(path.join(rootDir, 'pom.xml')) ||
                           (fs.existsSync(path.join(rootDir, 'package.json')) && !fs.existsSync(path.join(rootDir, 'pnpm-workspace.yaml')));
 
-  if (isDirectService) {
+  if (isDirectService && !seenCandidateDirs.has(rootDir)) {
+    seenCandidateDirs.add(rootDir);
     candidateDirs.push({ name: path.basename(rootDir), fullDirPath: rootDir });
   }
 
   try {
     const subDirs = fs.readdirSync(rootDir).filter(d => {
-      if (d === 'salt-pkg' || d === 'common' || d === 'pkg' || d === '.git' || d === 'node_modules' || d === 'vendor') return false;
+      if (d === 'salt-pkg' || d === 'common' || d === 'pkg' || d === '.git' || d === 'node_modules' || d === 'vendor' || d === 'packages') return false;
       try {
-        return fs.statSync(path.join(rootDir, d)).isDirectory();
+        const full = path.join(rootDir, d);
+        if (!fs.statSync(full).isDirectory()) return false;
+        // Must contain a manifest file to be considered a service
+        return fs.existsSync(path.join(full, 'go.mod')) ||
+               fs.existsSync(path.join(full, 'requirements.txt')) ||
+               fs.existsSync(path.join(full, 'pyproject.toml')) ||
+               fs.existsSync(path.join(full, 'pom.xml')) ||
+               (fs.existsSync(path.join(full, 'package.json')) && !fs.existsSync(path.join(full, 'pnpm-workspace.yaml')));
       } catch (e) {
         return false;
       }
     });
-    subDirs.forEach(d => candidateDirs.push({ name: d, fullDirPath: path.join(rootDir, d) }));
+    subDirs.forEach(d => {
+      const full = path.join(rootDir, d);
+      if (!seenCandidateDirs.has(full)) {
+        seenCandidateDirs.add(full);
+        candidateDirs.push({ name: d, fullDirPath: full });
+      }
+    });
   } catch (e) {}
+});
 
-  candidateDirs.forEach(({ name: d, fullDirPath }) => {
+candidateDirs.forEach(({ name: d, fullDirPath }) => {
     const runtime = detectRuntime(fullDirPath);
 
     if (!microservices.has(d)) {
@@ -376,7 +415,7 @@ serviceRootDirs.forEach(rootDir => {
       else if (d.includes('rag-cms')) port = '8811';
       else if (d.includes('ai-log')) port = '8000';
 
-      const relPath = path.relative(targetDir, fullDirPath);
+      const relPath = cleanRel(fullDirPath);
       microservices.set(d, {
         name: d,
         runtime,
@@ -394,7 +433,6 @@ serviceRootDirs.forEach(rootDir => {
       existing.runtime = runtime;
     }
   });
-});
 
 console.log(`📦 Discovered ${microservices.size} microservice module(s) across code sources.`);
 
@@ -406,7 +444,8 @@ console.log(`🔍 Scanning Polyglot API route definitions (Go, Python, TypeScrip
 // Helper to find which microservice owns a given file
 function getOwningService(relOrFullPath) {
   const norm = relOrFullPath.replace(/\\/g, '/');
-  for (const svcName of microservices.keys()) {
+  const sortedNames = Array.from(microservices.keys()).sort((a, b) => b.length - a.length);
+  for (const svcName of sortedNames) {
     if (norm.includes(`/${svcName}/`) || norm.endsWith(`/${svcName}`) || norm.includes(`/${svcName.replace(/^fmc-/, '')}/`)) {
       return svcName;
     }
@@ -434,6 +473,66 @@ goFiles.forEach(f => {
     goFilesBySvc.get(svc).push(f);
   }
 });
+
+function parseDeclarativeGoRoutes(content) {
+  const lines = content.split(/\r?\n/);
+  const endpoints = [];
+  const pathStack = [];
+  let braceDepth = 0;
+  let currentMethod = null;
+  let currentPath = null;
+  let currentAction = null;
+  let currentLine = 1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    const openBraces = (line.match(/\{/g) || []).length;
+    const closeBraces = (line.match(/\}/g) || []).length;
+
+    const pathMatch = trimmed.match(/Path:\s*["']([^"']+)["']/);
+    const methodMatch = trimmed.match(/Method:\s*(?:http\.Method([A-Za-z]+)|["']([A-Z]+)["'])/i);
+    const actionMatch = trimmed.match(/Action:\s*([a-zA-Z0-9_.]+)/);
+
+    if (pathMatch) {
+      const p = pathMatch[1];
+      const hasSubRoutes = trimmed.includes('Routes:') || (i + 1 < lines.length && lines[i + 1].includes('Routes:'));
+      if (hasSubRoutes) {
+        pathStack.push({ depth: braceDepth + openBraces, path: p });
+      } else {
+        currentPath = p;
+        currentLine = i + 1;
+      }
+    }
+
+    if (methodMatch) {
+      currentMethod = (methodMatch[1] || methodMatch[2]).toUpperCase();
+      if (!currentLine) currentLine = i + 1;
+    }
+
+    if (actionMatch) {
+      currentAction = actionMatch[1];
+    }
+
+    if (currentPath && currentMethod) {
+      const prefix = pathStack.map(s => s.path).join('');
+      let fullPath = prefix + (currentPath.startsWith('/') ? currentPath : '/' + currentPath);
+      fullPath = fullPath.replace(/\/+/g, '/');
+      endpoints.push({ method: currentMethod, path: fullPath, action: currentAction, line: currentLine });
+      currentPath = null;
+      currentMethod = null;
+      currentAction = null;
+    }
+
+    braceDepth += openBraces - closeBraces;
+    while (pathStack.length > 0 && braceDepth < pathStack[pathStack.length - 1].depth) {
+      pathStack.pop();
+    }
+  }
+
+  return endpoints;
+}
 
 for (const [svcName, files] of goFilesBySvc.entries()) {
   const svc = microservices.get(svcName);
@@ -471,8 +570,23 @@ for (const [svcName, files] of goFilesBySvc.entries()) {
   });
 
   files.forEach(f => {
-    const relPath = path.relative(targetDir, f);
+    const relPath = cleanRel(f);
     const content = fs.readFileSync(f, 'utf8');
+
+    // 1. Declarative Route Trees (ge.Route / Route struct trees)
+    if (content.includes('Path:') && (content.includes('Method:') || content.includes('http.Method'))) {
+      const declEndpoints = parseDeclarativeGoRoutes(content);
+      declEndpoints.forEach(ep => {
+        if (!svc.endpoints.some(r => r.method === ep.method && r.path === ep.path)) {
+          svc.endpoints.push({
+            method: ep.method,
+            path: ep.path,
+            provenance: `[SRC:CODE:${relPath}#L${ep.line}]`
+          });
+        }
+      });
+    }
+
     const lines = content.split(/\r?\n/);
 
     let pathVersion = '';
@@ -618,7 +732,7 @@ for (const [svcName, files] of pyFilesBySvc.entries()) {
 
   // Pass 2: Extract endpoints and Pydantic models
   files.forEach(f => {
-    const relPath = path.relative(targetDir, f);
+    const relPath = cleanRel(f);
     const content = fs.readFileSync(f, 'utf8');
     const lines = content.split(/\r?\n/);
     const baseName = path.basename(f, '.py');
@@ -676,6 +790,29 @@ for (const [svcName, files] of pyFilesBySvc.entries()) {
           });
         }
       }
+
+      // Flask route decorator: @app.route("/path", methods=["GET", "POST"])
+      const flaskMatch = trimmed.match(/@(app|api|bp)\.route\(\s*["']([^"']*)["'](?:\s*,\s*methods\s*=\s*\[([^\]]+)\])?/i);
+      if (flaskMatch) {
+        const subPath = flaskMatch[2];
+        const methodsRaw = flaskMatch[3] ? flaskMatch[3].replace(/['"]/g, '').split(',') : ['GET'];
+        methodsRaw.forEach(m => {
+          const method = m.trim().toUpperCase();
+          const fullRoute = joinPaths(filePrefix || '', subPath);
+          if (!svc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+            svc.endpoints.push({ method, path: fullRoute, provenance: `[SRC:CODE:${relPath}#L${idx + 1}]` });
+          }
+        });
+      }
+
+      // Django REST Framework: path("users/", views.UserList.as_view())
+      const djangoMatch = trimmed.match(/path\(\s*["']([^"']*)["']/i);
+      if (djangoMatch && (relPath.includes('urls.py') || relPath.includes('routing.py'))) {
+        const fullRoute = cleanPath(djangoMatch[1]);
+        if (!svc.endpoints.some(r => r.path === fullRoute)) {
+          svc.endpoints.push({ method: 'ALL', path: fullRoute, provenance: `[SRC:CODE:${relPath}#L${idx + 1}]` });
+        }
+      }
     });
   });
 }
@@ -689,7 +826,7 @@ const tsFiles = scanAllCodeSources((file, fullPath) => {
 });
 
 tsFiles.forEach(f => {
-  const relPath = path.relative(targetDir, f);
+  const relPath = cleanRel(f);
   const svc = getOwningService(relPath);
   if (!svc) return;
 
@@ -749,7 +886,7 @@ const javaFiles = scanAllCodeSources((file, fullPath) => {
 });
 
 javaFiles.forEach(f => {
-  const relPath = path.relative(targetDir, f);
+  const relPath = cleanRel(f);
   const svc = getOwningService(relPath);
   if (!svc) return;
 
@@ -780,16 +917,67 @@ javaFiles.forEach(f => {
   });
 });
 
-// 2e. OPENAPI / SWAGGER SPECS (Language-Agnostic)
-const openApiFiles = scanAllCodeSources((file) => /swagger.*\.json$|openapi.*\.(json|ya?ml)$/i.test(file));
+// Helper: Parse OpenAPI / Swagger YAML without external dependencies
+function parseOpenApiYaml(content) {
+  const routes = [];
+  const lines = content.split(/\r?\n/);
+  let inPaths = false;
+  let currentPath = null;
+  let pathsIndent = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.search(/\S/);
+
+    if (/^paths\s*:/i.test(trimmed)) {
+      inPaths = true;
+      pathsIndent = indent;
+      currentPath = null;
+      continue;
+    }
+
+    if (inPaths) {
+      if (indent <= pathsIndent && !trimmed.startsWith('-')) {
+        inPaths = false;
+        currentPath = null;
+        continue;
+      }
+
+      const pathMatch = trimmed.match(/^['"]?(\/[^'":]+)['"]?\s*:/);
+      if (pathMatch && indent > pathsIndent) {
+        currentPath = pathMatch[1].trim();
+        continue;
+      }
+
+      if (currentPath) {
+        const methodMatch = trimmed.match(/^(get|post|put|delete|patch|options|head)\s*:/i);
+        if (methodMatch) {
+          routes.push({
+            method: methodMatch[1].toUpperCase(),
+            path: currentPath,
+            line: i + 1
+          });
+        }
+      }
+    }
+  }
+  return routes;
+}
+
+// 2e. OPENAPI / SWAGGER SPECS (Language-Agnostic: JSON & YAML)
+const openApiFiles = scanAllCodeSources((file) => /swagger.*\.json$|openapi.*\.(json|ya?ml)$|api-spec.*\.(json|ya?ml)$/i.test(file));
 openApiFiles.forEach(f => {
-  const relPath = path.relative(targetDir, f);
+  const relPath = cleanRel(f);
   const svc = getOwningService(relPath);
   const targetSvc = svc ? microservices.get(svc) : null;
 
   try {
+    const fileContent = fs.readFileSync(f, 'utf8');
     if (f.endsWith('.json')) {
-      const doc = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const doc = JSON.parse(fileContent);
       if (doc.paths) {
         for (const [routePath, methods] of Object.entries(doc.paths)) {
           for (const [method, op] of Object.entries(methods)) {
@@ -805,8 +993,131 @@ openApiFiles.forEach(f => {
           }
         }
       }
+    } else if (f.endsWith('.yaml') || f.endsWith('.yml')) {
+      const yamlRoutes = parseOpenApiYaml(fileContent);
+      yamlRoutes.forEach(yr => {
+        if (targetSvc && !targetSvc.endpoints.some(r => r.method === yr.method && r.path === yr.path)) {
+          targetSvc.endpoints.push({
+            method: yr.method,
+            path: yr.path,
+            provenance: `[SRC:CODE:${relPath}#L${yr.line}]`
+          });
+        }
+      });
     }
   } catch (e) {}
+});
+
+// 2f. POSTMAN COLLECTIONS (*.postman_collection.json)
+const postmanFiles = scanAllCodeSources((file) => /postman.*\.json$/i.test(file));
+postmanFiles.forEach(pf => {
+  const relPath = cleanRel(pf);
+  const svc = getOwningService(relPath);
+  const targetSvc = svc ? microservices.get(svc) : null;
+
+  try {
+    const colJson = JSON.parse(fs.readFileSync(pf, 'utf8'));
+    function extractPostmanItems(items) {
+      if (!Array.isArray(items)) return;
+      items.forEach((item, idx) => {
+        if (item.item) {
+          extractPostmanItems(item.item);
+        } else if (item.request) {
+          const method = (item.request.method || 'GET').toUpperCase();
+          let rawUrl = '';
+          if (typeof item.request.url === 'string') rawUrl = item.request.url;
+          else if (item.request.url && Array.isArray(item.request.url.path)) rawUrl = '/' + item.request.url.path.join('/');
+          else if (item.request.url && item.request.url.raw) rawUrl = item.request.url.raw;
+
+          let cleanUrl = rawUrl.replace(/^(?:https?:\/\/[^\/]+|\{\{[^\}]+\}\})/, '');
+          if (!cleanUrl.startsWith('/')) cleanUrl = '/' + cleanUrl;
+          cleanUrl = cleanUrl.split('?')[0];
+
+          if (targetSvc && !targetSvc.endpoints.some(r => r.method === method && r.path === cleanUrl)) {
+            targetSvc.endpoints.push({
+              method,
+              path: cleanUrl,
+              provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+            });
+          }
+        }
+      });
+    }
+    if (colJson.item) extractPostmanItems(colJson.item);
+  } catch (e) {}
+});
+
+// 2g. PHP / LARAVEL (routes/*.php)
+const phpFiles = scanAllCodeSources((file, fullPath) => {
+  if (!file.endsWith('.php')) return false;
+  if (fullPath.includes('/vendor/') || fullPath.includes('/tests/')) return false;
+  return true;
+});
+
+phpFiles.forEach(f => {
+  const relPath = cleanRel(f);
+  const svc = getOwningService(relPath);
+  if (!svc) return;
+  const targetSvc = microservices.get(svc);
+  if (!targetSvc) return;
+
+  const content = fs.readFileSync(f, 'utf8');
+  const lines = content.split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('#')) return;
+
+    const routeMatch = trimmed.match(/Route::(get|post|put|delete|patch)\(\s*['"]([^'"]*)['"]/i);
+    if (routeMatch) {
+      const method = routeMatch[1].toUpperCase();
+      const subPath = cleanPath(routeMatch[2]);
+      if (!targetSvc.endpoints.some(r => r.method === method && r.path === subPath)) {
+        targetSvc.endpoints.push({
+          method,
+          path: subPath,
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        });
+      }
+    }
+  });
+});
+
+// 2h. C# / ASP.NET CORE (*.cs)
+const csFiles = scanAllCodeSources((file, fullPath) => {
+  if (!file.endsWith('.cs')) return false;
+  if (fullPath.includes('/bin/') || fullPath.includes('/obj/') || fullPath.includes('/Test/')) return false;
+  return true;
+});
+
+csFiles.forEach(f => {
+  const relPath = cleanRel(f);
+  const svc = getOwningService(relPath);
+  if (!svc) return;
+  const targetSvc = microservices.get(svc);
+  if (!targetSvc) return;
+
+  const content = fs.readFileSync(f, 'utf8');
+  let baseRoute = '';
+  const routeAttr = content.match(/\[Route\(\s*["']([^"']*)["']\s*\)\]/i);
+  if (routeAttr) baseRoute = routeAttr[1].replace(/\[controller\]/i, svc);
+
+  const lines = content.split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    const httpAttr = trimmed.match(/\[Http(Get|Post|Put|Delete|Patch)(?:\(\s*["']?([^"'\)]*)["']?\s*\))?\]/i);
+    if (httpAttr) {
+      const method = httpAttr[1].toUpperCase();
+      const sub = httpAttr[2] || '';
+      const fullRoute = joinPaths(baseRoute, sub);
+      if (!targetSvc.endpoints.some(r => r.method === method && r.path === fullRoute)) {
+        targetSvc.endpoints.push({
+          method,
+          path: fullRoute,
+          provenance: `[SRC:CODE:${relPath}#L${idx + 1}]`
+        });
+      }
+    }
+  });
 });
 
 // -------------------------------------------------------------
@@ -818,7 +1129,7 @@ const protoFiles = scanAllCodeSources((file) => file.endsWith('.proto'));
 
 protoFiles.forEach(p => {
   const content = fs.readFileSync(p, 'utf8');
-  const relPath = path.relative(targetDir, p);
+  const relPath = cleanRel(p);
   
   let matchedSvc = getOwningService(relPath);
   if (!matchedSvc) {
@@ -874,7 +1185,7 @@ const krakendFiles = scanAllCodeSources((file) => file.includes('krakend') && fi
 const gatewayEndpoints = [];
 
 krakendFiles.forEach(kf => {
-  const relPath = path.relative(targetDir, kf);
+  const relPath = cleanRel(kf);
   try {
     const json = JSON.parse(fs.readFileSync(kf, 'utf8'));
     if (json.endpoints && Array.isArray(json.endpoints)) {
@@ -957,7 +1268,7 @@ curlDirs.forEach(curlDir => {
       files.forEach(f => {
         const fPath = path.join(sysPath, f);
         const content = fs.readFileSync(fPath, 'utf8');
-        const relPath = path.relative(targetDir, fPath);
+        const relPath = cleanRel(fPath);
         sys.sources.add(`[SRC:CODE:${relPath}]`);
 
         const methodMatch = content.match(/--request\s+([A-Z]+)/i) || content.match(/-X\s+([A-Z]+)/i) || ['GET', 'GET'];
@@ -991,7 +1302,7 @@ curlDirs.forEach(curlDir => {
 // 5b. Ingest external endpoints from YAML configs (web_api)
 configFiles.forEach(cfgPath => {
   const content = fs.readFileSync(cfgPath, 'utf8');
-  const relPath = path.relative(targetDir, cfgPath);
+  const relPath = cleanRel(cfgPath);
   const lines = content.split(/\r?\n/);
 
   lines.forEach((line, idx) => {
@@ -1062,7 +1373,7 @@ brdFiles.forEach(fPath => {
   else if (lower.includes('appointment') || lower.includes('wfm')) targetSys = 'co';
 
   if (targetSys && surroundingSystems.has(targetSys)) {
-    const relBrd = path.relative(targetDir, fPath);
+    const relBrd = cleanRel(fPath);
     surroundingSystems.get(targetSys).sources.add(`[SRC:BRD:${relBrd}]`);
   }
 });
@@ -1158,9 +1469,8 @@ md += `Structured data models extracted from Go structs and Python Pydantic mode
 
 sortedSvcs.forEach(svc => {
   if (svc.dtoModels.length === 0) return;
-  const sampleModels = svc.dtoModels.slice(0, 15);
   md += `<details>\n<summary><b>📦 ${svc.name} (${svc.dtoModels.length} Models Cataloged)</b></summary>\n\n`;
-  sampleModels.forEach(m => {
+  svc.dtoModels.forEach(m => {
     md += `##### \`${m.name}\` ${m.provenance}\n`;
     if (m.fields.length > 0) {
       md += `| Field / JSON Key | Type | Required |\n`;
@@ -1171,9 +1481,6 @@ sortedSvcs.forEach(svc => {
       md += `\n`;
     }
   });
-  if (svc.dtoModels.length > 15) {
-    md += `> *... and ${svc.dtoModels.length - 15} more DTO models cataloged in \`${svc.name}\`.*\n\n`;
-  }
   md += `</details>\n\n`;
 });
 

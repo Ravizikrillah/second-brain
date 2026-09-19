@@ -14,23 +14,33 @@ Scan all raw inputs across the repository, establish an exhaustive **Delivery Pl
 
 ### 0. 🌐 Universal Source Resolution (External Repos & Living Ground Truth)
 Second Brain supports connecting to external live Backend (BE) and Frontend (FE) repositories **without copying or committing external git repositories** into this workspace:
-- **Declarative (`second-brain.json` / `.brainrc.json`)**:
+- **Shared Declarative (`second-brain.json` / `.brainrc.json`)**:
   ```json
   {
+    "name": "My Architecture",
     "sources": {
       "code": ["../backend-service", "../frontend-app", "./00-raw-inputs/existing-code"],
-      "ddl": ["../backend-service/migrations", "./00-raw-inputs/db"]
+      "ddl": ["../backend-service/migrations", "./00-raw-inputs/db"],
+      "brd": ["./00-raw-inputs/brd"]
     }
   }
   ```
-- **CLI Flags**: Pass `--code=<path>`, `--ddl=<path>`, or `--path=<path>`:
-  - `node ./bin/ingest-apis.js --code=../backend-repo`
-  - `node ./bin/ingest-ddl.js --ddl=../backend-repo/migrations`
+- **Local Team Collaboration Override (`second-brain.local.json`)**:
+  Multiple System Analysts can collaborate on the same Second Brain repository without path conflicts. Each SA can define `second-brain.local.json` (git-ignored) with absolute laptop paths, home directory expansion (`~/projects/...`), or environment variables (`$REPO_PATH`):
+  ```json
+  {
+    "sources": {
+      "code": ["~/work/backend-service", "$FE_REPO/frontend-app"]
+    }
+  }
+  ```
 - **Zero-Footprint Symlinks (`ln -s`)**:
   - `ln -s /path/to/external-repo ./00-raw-inputs/existing-code/my-repo`
   - The folder `00-raw-inputs/existing-code/*` is git-ignored, guaranteeing zero bloat in git history.
+- **Portable Relative Provenance**:
+  All generated provenance tags automatically strip machine-specific local directories (`/Users/...`, `C:\Users\...`), compiling into portable citations (e.g. `[SRC:CODE:backend-service/auth/controller.go#L40]`).
 - **🔄 Living Ground Truth on `git pull`**:
-  Whenever the external codebase is updated (`git pull origin main` in the external repo), simply rerun `/brain-ingest` (or `npm run ingest:apis` / `npm run ingest:ddl`). Second Brain immediately rescans the live source code and synchronizes Ground Truth (`api-inventory.md`, `entity-catalog.md`) idempotently.
+  Whenever the external codebase is updated (`git pull origin main` in the external repo), simply rerun `/brain-ingest` (or `npm run ingest`). Second Brain immediately rescans live source code, migrations, and PRDs, synchronizing Ground Truth (`api-inventory.md`, `entity-catalog.md`, `business-rules.md`) idempotently.
 
 ### 1. 🧹 Pre-Flight Auto-Triage & File Organization
 If raw materials are located in an unstructured folder (e.g., `artifacts/`, `vault/`, `docs/`) or if an argument is passed (`/brain-ingest artifacts/`):
@@ -62,13 +72,17 @@ Create or synchronize the task backlog so deliverables can be executed cleanly t
 ```
 
 ### 4. 🏛️ Crystallize Ground Truth (`01-ground-truth/`)
+All ingestion scripts compile lossless, self-contained truth into `01-ground-truth/`. Once ingested, `00-raw-inputs/` can be emptied or left as `.gitkeep`, and the repository operates under the **Closed-World Assumption (CWA)**.
+- **Universal Ingestion**: Run `npm run ingest` to deterministically execute DDL, API, and BRD ingestions in sequence.
 - **Domain Glossary (`01-ground-truth/domain-glossary.md`)**: Update ubiquitous business terminology, canonical definitions, and forbidden synonyms.
+- **Business Rules (`01-ground-truth/business-rules.md`)**:
+  - Run `node ./bin/ingest-brd.js` (or `npm run ingest:brd`) to parse requirements (`REQ-XX`), journey flows, RBAC role-permission trees, and business logic into structured Markdown tables.
 - **Entity Catalog (`01-ground-truth/entity-catalog.md`)**:
-  - **Deterministic DDL Ingestion**: Run `node ./bin/ingest-ddl.js` (or `npm run ingest:ddl`) to parse 100% of tables and columns directly from SQL files into `entity-catalog.md`. This guarantees zero dropped tables or columns.
+  - **Deterministic DDL Ingestion**: Run `node ./bin/ingest-ddl.js` (or `npm run ingest:ddl`) to parse 100% of tables, column types, nullabilities, and comments directly from SQL files into `entity-catalog.md`. This guarantees zero dropped tables or columns.
   - Enrich the catalog with lifecycle state machine transitions, Go entity mappings, and domain relationships.
   - **ANTI-CHERRY-PICKING RULE**: Every table discovered in DDL MUST be indexed in `entity-catalog.md`. The auditor (`node ./bin/audit.js`) will fail with a hard block if any table is omitted.
 - **API Inventory & Surrounding Systems Disambiguation (`01-ground-truth/api-inventory.md`)**:
-  - **Deterministic API & gRPC Ingestion**: Run `node ./bin/ingest-apis.js` (or `npm run ingest:apis`) to scan configs, curl samples, Go controllers (resolving multi-tier router groups, root empty paths, and filtering dead comments), gRPC Protocol Buffers (`.proto`), KrakenD API Gateway ingress configs (`krakend.json`), and Go DTO models (`json:"..."`), automatically crystallizing Internal HTTP APIs, gRPC RPC Contracts, KrakenD Edge Ingress, DTO Schemas, and External Surrounding Systems with 100% provenance citations `[SRC:...]`.
+  - **Deterministic API & gRPC Ingestion**: Run `node ./bin/ingest-apis.js` (or `npm run ingest:apis`) to scan configs, curl samples, declarative Go router trees (`ge.Route`), imperative router groups, gRPC Protocol Buffers (`.proto`), KrakenD API Gateway ingress configs (`krakend.json`), and lossless Go DTO models (`json:"..."`). Automatically crystallizes Internal HTTP APIs, gRPC RPC Contracts, KrakenD Edge Ingress, DTO Schemas, and External Surrounding Systems with 100% provenance citations `[SRC:...]`.
   
 #### ⚖️ The IFA Disambiguation Rule (Internal APIs vs External Surrounding Systems):
 Enterprise projects frequently use the term "Interface Agreement" (IFA) for both internal microservice contracts and external integrations. You MUST strictly partition them:

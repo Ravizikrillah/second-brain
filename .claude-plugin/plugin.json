@@ -1,6 +1,6 @@
 {
   "name": "ravizikrillah-second-brain",
-  "version": "1.5.0",
+  "version": "1.7.0",
   "description": "Universal System Analyst Second Brain: Ingest BRDs, Figma specs, DDL/DML, production code, and MoMs to produce verified PlantUML sequence diagrams, Markdown API contracts, and LLDs with strict provenance and anti-gaslighting protection.",
   "author": {
     "name": "Ravi Zikrillah",

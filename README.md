@@ -42,7 +42,7 @@ All commands are single-token hyphenated commands accessible in agent conversati
 | :--- | :--- |
 | `/brain-init` | Scaffolds the 6-zone directory hierarchy, configuration rules, and baseline templates. |
 | `/brain-ingest` | Scans `00-raw-inputs/`, extracts entities to `01-ground-truth/`, checks contradictions, and maps provenance. |
-| `/brain-deliver` | Generates PlantUML `.puml`, API contracts `.md`, and LLDs in `04-deliverables/` with inline `[SRC:...]` citations. |
+| `/brain-deliver [apis]` | Generates PlantUML `.puml`, API contracts `.md`, and LLDs in `04-deliverables/` with inline `[SRC:...]` citations. (`apis` generates 1-to-1 endpoint sequence diagrams). |
 | `/brain-branch <name>` | Creates an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`. |
 | `/brain-adopt <name>` | Promotes a scenario to `ADOPTED`, generates an authoritative ADR in `05-adrs/`, and updates deliverables. |
 | `/brain-audit` | Validates 100% provenance tag coverage and asserts database DDL and API contract consistency. |
@@ -101,10 +101,31 @@ Whenever upstream developers push changes:
 cd ../backend/order-service && git pull
 
 # Re-sync Second Brain ground truth immediately
-cd ../second-brain && npm run ingest:apis && npm run ingest:ddl
+cd ../second-brain && npm run ingest
 # or inside agent chat: /brain-ingest
 ```
-Second Brain immediately parses the latest routes, protobuf contracts, DTO structs, and SQL migrations, idempotently refreshing `01-ground-truth/` in seconds.
+Second Brain immediately parses the latest routes, protobuf contracts, DTO structs, SQL migrations, and PRD specifications, idempotently refreshing `01-ground-truth/` in seconds.
+
+### 5. 👥 Multi-SA Team Collaboration & Local Machine Overrides
+When multiple System Analysts collaborate on the same Second Brain repository, different teammates may have external repositories checked out in different directories.
+- **Shared Configuration (`second-brain.json`)**: Check in relative repository paths or leave default raw input directories.
+- **Personal Local Override (`second-brain.local.json`)**: System Analysts can define machine-specific paths without polluting git (`second-brain.local.json` is git-ignored):
+  ```json
+  {
+    "sources": {
+      "code": ["~/work/backend-repos", "$BACKEND_ROOT/order-service"],
+      "ddl": ["~/work/backend-repos/migrations"],
+      "brd": ["$DOCS_ROOT/product-specs"]
+    }
+  }
+  ```
+- **Portable Relative Citations**: All provenance tags automatically strip machine-specific prefixes (`/Users/username/...`, `C:\Users\...`), compiling into portable repository citations (e.g., `[SRC:CODE:order-service/internal/controller/http/api/v1/order.go#L42]`). Any teammate can read or audit deliverables regardless of their local directory layout.
+
+### 6. 🔒 Lossless Ground Truth & Closed-World Assumption (CWA)
+Second Brain enforces a strict AST extraction model:
+1. **Lossless Ingestion**: All database tables, columns, constraints, DTO models, API routes, and BRD requirements are compiled directly into `01-ground-truth/`.
+2. **Purge-Safe / Zero Footprint**: Once ingested, `00-raw-inputs/` can be emptied or retained as `.gitkeep`. The Second Brain retains 100% of the domain knowledge.
+3. **Closed-World Verification**: Ground truth in `01-ground-truth/` is the absolute boundary of system reality. Hallucinating unstated database fields or undocumented endpoints is strictly prohibited. Missing elements are reported explicitly as `[NOT FOUND IN GROUND TRUTH]`.
 
 ---
 
