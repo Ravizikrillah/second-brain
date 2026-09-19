@@ -49,6 +49,33 @@ if (targetDir !== packageRoot) {
     }
   });
 
+  // Copy project-level skills into target project (.agents/skills/ and skills/)
+  const skillsSourceDir = path.join(packageRoot, 'skills');
+  if (fs.existsSync(skillsSourceDir)) {
+    const targetSkillDestinations = [
+      path.join(targetDir, '.agents', 'skills'),
+      path.join(targetDir, 'skills')
+    ];
+
+    targetSkillDestinations.forEach(destBaseDir => {
+      fs.mkdirSync(destBaseDir, { recursive: true });
+      const skillEntries = fs.readdirSync(skillsSourceDir);
+      skillEntries.forEach(entry => {
+        const srcSkillFolder = path.join(skillsSourceDir, entry);
+        if (fs.statSync(srcSkillFolder).isDirectory()) {
+          const destSkillFolder = path.join(destBaseDir, entry);
+          fs.mkdirSync(destSkillFolder, { recursive: true });
+          const srcSkillMd = path.join(srcSkillFolder, 'SKILL.md');
+          const destSkillMd = path.join(destSkillFolder, 'SKILL.md');
+          if (fs.existsSync(srcSkillMd)) {
+            fs.copyFileSync(srcSkillMd, destSkillMd);
+          }
+        }
+      });
+    });
+    console.log(`  🎯 Installed project-level skills into .agents/skills/ & skills/`);
+  }
+
   const targetPackageJson = path.join(targetDir, 'package.json');
   if (!fs.existsSync(targetPackageJson)) {
     const pkgContent = JSON.stringify({
@@ -58,6 +85,7 @@ if (targetDir !== packageRoot) {
       scripts: {
         "init": "node ./bin/init.js",
         "organize": "node ./bin/organize.js",
+        "ingest": "node ./bin/ingest-ddl.js && node ./bin/ingest-apis.js && node ./bin/ingest-brd.js",
         "ingest:ddl": "node ./bin/ingest-ddl.js",
         "ingest:apis": "node ./bin/ingest-apis.js",
         "ingest:brd": "node ./bin/ingest-brd.js",

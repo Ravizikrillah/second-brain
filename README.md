@@ -12,24 +12,35 @@
 
 ## 🚀 Installation & Quickstart
 
-### Option A: Install via Skills CLI ([skills.sh](https://www.skills.sh/ravizikrillah/second-brain))
-Install globally or in your current project repository for any agent (Antigravity, Cursor, Codex):
+### Option A: Install Globally (User-Level for all your projects)
+Installs skills into `~/.agents/skills/` accessible across all repositories on your machine:
 ```bash
-npx skills add ravizikrillah/second-brain
+npx skills add ravizikrillah/second-brain -g --all
 ```
 
-
-### Option B: Install via Claude Code CLI Plugin
+### Option B: Install at Project Level (Shared via Git for All Teammates)
+Installs skills directly into your project's `.agents/skills/` using physical file copying (`--copy` prevents broken symlinks across machines). When committed to Git, **anyone who pulls or clones your project repository can immediately use all Second Brain skills without installing anything**:
 ```bash
-claude plugins install ravizikrillah-second-brain
+# 1. Install skills at project level
+npx skills add ravizikrillah/second-brain --copy --all
+
+# 2. Commit to Git so all teammates inherit the skills
+git add .agents/ skills-lock.json
+git commit -m "feat: install second-brain skills at project level"
+git push origin main
 ```
 
 ### Option C: Initialize Locally in Any Repository
-If cloning or running directly:
+Running the initializer automatically scaffolds the 6-zone hierarchy and installs project-level skills into `.agents/skills/` and `skills/`:
 ```bash
 npx @ravizikrillah/second-brain init
 # or locally:
 node ./bin/init.js
+```
+
+### Option D: Install via Claude Code CLI Plugin
+```bash
+claude plugins install ravizikrillah-second-brain
 ```
 
 ---
