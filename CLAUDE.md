@@ -18,7 +18,7 @@ When working in this repository:
    - `/brain-init`: Initialize 6-zone folder structure, .gitignore protection rules, and starter templates.
    - `/brain-ingest`: Ingest raw inputs or external pointers via `ingest-ddl.js`, `ingest-apis.js`, and `ingest-brd.js`, detect conflicts, map provenance.
    - `/brain-deliver [apis]`: Generate PlantUML sequence diagrams, Markdown API contracts, and LLDs. Use `apis` to generate 1-to-1 endpoint sequence diagrams.
-   - `/brain-branch <name>`: Create isolated trade-off scenario in `03-constraint-branches/`.
+   - `/brain-branch <name>`: Create isolated trade-off scenario in `03-constraint-branches/` with cross-branch awareness (detecting obsolete parts, conflicts, and synergies).
    - `/brain-adopt <name>`: Adopt scenario via ADR and synchronize deliverables.
    - `/brain-audit`: Audit 100% provenance and system consistency.
    - `/brain-query <query>`: Interactive Q&A across ground truth, active DDL, and deliverables.

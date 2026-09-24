@@ -54,7 +54,7 @@ If a Tier 4 or Tier 5 input contradicts Tier 1, 2, or 3:
 - `/brain-init`: Run `node ./bin/init.js` to scaffold or refresh the 6-zone folder hierarchy, .gitignore protection rules, and baseline templates.
 - `/brain-ingest`: Parse `00-raw-inputs/` (or external pointers), run `node ./bin/ingest-ddl.js` for schemas, run `node ./bin/ingest-apis.js` for internal and surrounding APIs, run `node ./bin/ingest-brd.js` for business rules and RBAC, update `01-ground-truth/`, assert truth precedence, detect contradictions, and update `02-provenance/traceability-matrix.md`.
 - `/brain-deliver [apis]`: Verify no Hard Block is active, then generate PlantUML diagrams (`04-deliverables/sequence-diagrams/*.puml`), API contracts (`04-deliverables/api-contracts/*.md`), and LLDs (`04-deliverables/lld/*.md`) with full `[SRC:...]` tags. Pass `apis` (or run `npm run deliver:apis`) to auto-generate 1-to-1 sequence diagrams for all internal backend endpoints.
-- `/brain-branch <name>`: Create an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`.
+- `/brain-branch <name>`: Create an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md` with cross-branch correlation, detecting redundant/obsolete parts, conflicts, and synergies across all branches.
 - `/brain-adopt <name>`: Record an ADR in `05-adrs/`, set scenario status to `ADOPTED`, and trigger `/brain-deliver` to synchronize deliverables.
 - `/brain-audit`: Verify 100% provenance tag coverage across all deliverables and assert database DDL consistency.
 - `/brain-query <query>`: Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations.

@@ -1,6 +1,6 @@
 {
   "name": "@ravizikrillah/second-brain",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Universal System Analyst Second Brain for AI Agents: Ingest BRD, Figma, DB, Code, & MoM into verified PlantUML, API contracts, LLD, impact analysis, and Jira tickets with provenance and anti-gaslighting protection.",
   "keywords": [
     "agent-skills",
@@ -51,6 +51,7 @@
     "ingest:apis": "node ./bin/ingest-apis.js",
     "ingest:brd": "node ./bin/ingest-brd.js",
     "deliver:apis": "node ./bin/generate-api-sequences.js",
+    "branch": "node ./bin/branch.js",
     "sync": "node ./bin/sync.js",
     "sync:check": "node ./bin/sync.js --dry-run",
     "diff": "node ./bin/sync.js --diff",

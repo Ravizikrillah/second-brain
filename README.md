@@ -54,7 +54,7 @@ All commands are single-token hyphenated commands accessible in agent conversati
 | `/brain-init` | Scaffolds the 6-zone directory hierarchy, configuration rules, and baseline templates. |
 | `/brain-ingest` | Scans `00-raw-inputs/`, extracts entities to `01-ground-truth/`, checks contradictions, and maps provenance. |
 | `/brain-deliver [apis]` | Generates PlantUML `.puml`, API contracts `.md`, and LLDs in `04-deliverables/` with inline `[SRC:...]` citations. (`apis` generates 1-to-1 endpoint sequence diagrams). |
-| `/brain-branch <name>` | Creates an isolated trade-off scenario document in `03-constraint-branches/scenario-<name>.md`. |
+| `/brain-branch <name>` | Creates an isolated trade-off scenario in `03-constraint-branches/scenario-<name>.md` with cross-branch awareness (detecting obsolete parts, conflicts, and synergies). |
 | `/brain-adopt <name>` | Promotes a scenario to `ADOPTED`, generates an authoritative ADR in `05-adrs/`, and updates deliverables. |
 | `/brain-audit` | Validates 100% provenance tag coverage and asserts database DDL and API contract consistency. |
 | `/brain-query <query>` | Interactive zero-hallucination Q&A across ground truth, active DDL, and deliverables with exact line citations. |
