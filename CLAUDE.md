@@ -14,7 +14,8 @@ When working in this repository:
 6. **Mandatory Provenance**: Every endpoint, model field, and diagram step in `04-deliverables/` must include inline citation tags:
    - PlantUML: `<color:#007acc><b>[SRC:BRD#REQ-01]</b></color>`
    - Markdown: `> **Provenance**: [SRC:BRD#REQ-01] | [SRC:DDL:tbl_orders]`
-7. **Commands**:
+7. **Critical Socratic Probing (The Grill-Me Reflex)**: Never passively assume unstated requirements or edge cases. Present the direct Ground-Truth-backed answer, then append optional structured frontier questions (Decision, Recommendation, Trade-off) to stress-test failure modes, concurrency, and IFA SLAs.
+8. **Commands**:
    - `/brain-init`: Initialize 6-zone folder structure, .gitignore protection rules, and starter templates.
    - `/brain-ingest`: Ingest raw inputs or external pointers via `ingest-ddl.js`, `ingest-apis.js`, and `ingest-brd.js`, detect conflicts, map provenance.
    - `/brain-deliver [apis]`: Generate PlantUML sequence diagrams, Markdown API contracts, and LLDs. Use `apis` to generate 1-to-1 endpoint sequence diagrams.
